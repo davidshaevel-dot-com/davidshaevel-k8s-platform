@@ -1,0 +1,41 @@
+# Environment variables
+.env
+.env.*
+.envrc
+*.env
+*.env.local
+
+# Kubernetes
+kubeconfig
+*.kubeconfig
+
+# Secrets
+secrets/
+*.pem
+*.key
+*.crt
+scripts/github/azure-sp.json
+scripts/github/gcp-sa-key.json
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Temporary
+tmp/
+
+# Claude Code context files
+.claude/
+CLAUDE.local.md
+SESSION_LOG.md
