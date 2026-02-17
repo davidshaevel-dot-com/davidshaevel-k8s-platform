@@ -32,17 +32,16 @@ echo "Waiting for Argo CD server to be ready..."
 kubectl rollout status deployment/argocd-server -n "${ARGOCD_NAMESPACE}" --timeout=3m
 
 echo ""
-echo "=== Initial Admin Password ==="
-ADMIN_PASSWORD=$(kubectl -n "${ARGOCD_NAMESPACE}" get secret argocd-initial-admin-secret \
-    -o jsonpath="{.data.password}" 2>/dev/null | base64 -d)
-if [ -n "${ADMIN_PASSWORD}" ]; then
+echo "=== Initial Admin Credentials ==="
+if kubectl -n "${ARGOCD_NAMESPACE}" get secret argocd-initial-admin-secret >/dev/null 2>&1; then
     echo "  Username: admin"
-    echo "  Password: ${ADMIN_PASSWORD}"
+    echo "  To retrieve the initial admin password, run:"
+    echo "    kubectl -n \"${ARGOCD_NAMESPACE}\" get secret argocd-initial-admin-secret -o jsonpath=\"{.data.password}\" | base64 -d; echo"
     echo ""
-    echo "  IMPORTANT: Save this password to 1Password, then delete the secret:"
-    echo "    kubectl -n ${ARGOCD_NAMESPACE} delete secret argocd-initial-admin-secret"
+    echo "  IMPORTANT: Save this password to a secure location (like 1Password), then delete the secret:"
+    echo "    kubectl -n \"${ARGOCD_NAMESPACE}\" delete secret argocd-initial-admin-secret"
 else
-    echo "  Initial admin secret not found. Password may have already been retrieved."
+    echo "  Initial admin secret not found. Password may have already been retrieved and secret deleted."
 fi
 
 echo ""
