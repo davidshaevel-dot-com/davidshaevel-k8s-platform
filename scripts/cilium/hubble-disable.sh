@@ -9,6 +9,18 @@
 source "$(dirname "$0")/../config.sh"
 setup_logging "hubble-disable"
 
+# Check if ACNS is already disabled
+ACNS_STATUS=$(az aks show \
+    --resource-group "${RESOURCE_GROUP}" \
+    --name "${AKS_CLUSTER_NAME}" \
+    --query "networkProfile.advancedNetworking.enabled" \
+    -o tsv 2>/dev/null || echo "false")
+
+if [[ "${ACNS_STATUS}" != "true" ]]; then
+    echo "ACNS is already disabled. Nothing to do."
+    exit 0
+fi
+
 echo "WARNING: This will disable Advanced Container Networking Services (ACNS)."
 echo "  - Hubble relay will be removed"
 echo "  - Network flow observability will be disabled"

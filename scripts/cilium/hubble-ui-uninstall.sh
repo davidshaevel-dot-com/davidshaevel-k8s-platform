@@ -20,4 +20,8 @@ echo "Uninstalling Hubble UI..."
 kubectl delete -f "${SCRIPT_DIR}/hubble-ui.yaml" --ignore-not-found=true
 
 echo ""
+echo "Verifying Hubble UI removed..."
+kubectl get pods -n kube-system -l k8s-app=hubble-ui 2>/dev/null || true
+
+echo ""
 echo "Hubble UI uninstalled."
