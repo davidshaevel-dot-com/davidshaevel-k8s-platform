@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+spec:
+  description: Platform components managed by Argo CD
+  # Allow deploying to these namespaces on the local cluster.
+  destinations:
+    - namespace: portainer
+      server: https://kubernetes.default.svc
+    - namespace: argocd
+      server: https://kubernetes.default.svc
+  # Allow any source repo in the org.
+  sourceRepos:
+    - https://github.com/davidshaevel-dot-com/*
+    - https://portainer.github.io/k8s/
+    - https://argoproj.github.io/argo-helm
+  # Allow common Kubernetes resource types.
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'

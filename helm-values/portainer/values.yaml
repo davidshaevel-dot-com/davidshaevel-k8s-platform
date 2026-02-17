@@ -1,0 +1,17 @@
+# Portainer BE Helm values managed by Argo CD.
+# Chart: portainer/portainer
+# Reference: https://docs.portainer.io/start/install/server/kubernetes/baremetal
+#
+# NOTE: The Helm chart has a bug where --trusted-origins values get wrapped in
+# escaped double quotes, breaking CSRF validation. The install script patches
+# the deployment args directly after Helm install. Argo CD will show a diff for
+# the patched args — this is expected and should not be synced back.
+
+enterpriseEdition:
+  enabled: true
+
+image:
+  tag: lts
+
+service:
+  type: ClusterIP
