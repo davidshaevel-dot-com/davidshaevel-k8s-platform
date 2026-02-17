@@ -29,9 +29,10 @@ fi
 
 echo ""
 echo "=== Hubble Services ==="
-kubectl get svc -n kube-system -l k8s-app=hubble-relay 2>/dev/null || true
-kubectl get svc -n kube-system -l k8s-app=hubble-ui 2>/dev/null || true
-if ! kubectl get svc -n kube-system --no-headers -l "k8s-app in (hubble-relay, hubble-ui)" 2>/dev/null | grep -q .; then
+HUBBLE_SVCS=$(kubectl get svc -n kube-system -l "k8s-app in (hubble-relay, hubble-ui)" 2>/dev/null)
+if [ -n "${HUBBLE_SVCS}" ]; then
+    echo "${HUBBLE_SVCS}"
+else
     echo "  (no hubble services found)"
 fi
 

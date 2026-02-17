@@ -74,7 +74,7 @@ spec:
   ingress:
     - fromEndpoints:
         - matchLabels:
-            k8s:kubernetes.io/metadata.name: teleport-cluster
+            k8s:io.kubernetes.pod.namespace: teleport-cluster
       toPorts:
         - ports:
             - port: "9443"
