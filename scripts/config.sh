@@ -19,6 +19,10 @@ GKE_ZONE="us-central1-a"
 GKE_MACHINE_TYPE="e2-medium"
 GKE_NODE_COUNT=1
 
+# --- Azure Container Registry ---
+ACR_NAME="k8sdevplatformacr"
+ACR_LOGIN_SERVER="${ACR_NAME}.azurecr.io"
+
 # --- Teleport / Portainer Domains ---
 TELEPORT_DOMAIN="${TELEPORT_DOMAIN:-teleport.davidshaevel.com}"
 PORTAINER_TRUSTED_ORIGIN="${PORTAINER_TRUSTED_ORIGIN:-portainer.${TELEPORT_DOMAIN}}"
