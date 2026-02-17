@@ -13,7 +13,7 @@ setup_logging "hubble-disable"
 ACNS_STATUS=$(az aks show \
     --resource-group "${RESOURCE_GROUP}" \
     --name "${AKS_CLUSTER_NAME}" \
-    --query "networkProfile.advancedNetworking.enabled" \
+    --query "networkProfile.advancedNetworking.observability.enabled" \
     -o tsv 2>/dev/null || echo "false")
 
 if [[ "${ACNS_STATUS}" != "true" ]]; then
@@ -49,7 +49,7 @@ echo "ACNS disabled. Hubble relay pods will be removed."
 echo ""
 
 echo "=== Cilium Config (Hubble) ==="
-kubectl get cm -n kube-system cilium-config -o yaml | grep -E "enable-hubble"
+kubectl get cm -n kube-system cilium-config -o yaml | grep -E "enable-hubble" || echo "  (enable-hubble not found)"
 
 echo ""
 echo "Hubble is disabled."

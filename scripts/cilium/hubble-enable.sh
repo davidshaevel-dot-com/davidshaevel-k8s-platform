@@ -52,13 +52,18 @@ for i in $(seq 1 30); do
     sleep 10
 done
 
+if ! kubectl get pods -n kube-system -l k8s-app=hubble-relay --no-headers 2>/dev/null | grep -q "Running"; then
+    echo "WARNING: hubble-relay pods not running after 5 minutes."
+    echo "Check status manually: kubectl get pods -n kube-system -l k8s-app=hubble-relay"
+fi
+
 echo ""
 echo "=== Hubble Relay Pods ==="
 kubectl get pods -n kube-system -l k8s-app=hubble-relay -o wide
 
 echo ""
 echo "=== Cilium Config (Hubble) ==="
-kubectl get cm -n kube-system cilium-config -o yaml | grep -E "enable-hubble"
+kubectl get cm -n kube-system cilium-config -o yaml | grep -E "enable-hubble" || echo "  (enable-hubble not found)"
 
 echo ""
 echo "Hubble is enabled. Next steps:"
