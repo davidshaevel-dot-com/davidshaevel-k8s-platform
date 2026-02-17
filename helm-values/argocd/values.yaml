@@ -1,0 +1,26 @@
+# Argo CD Helm values for AKS control plane.
+# Chart: argo/argo-cd
+# Reference: https://github.com/argoproj/argo-helm/tree/main/charts/argo-cd
+
+# Server: ClusterIP only — accessed via Teleport, no public endpoint.
+server:
+  service:
+    type: ClusterIP
+  # Run HTTP internally; TLS termination is handled by Teleport.
+  extraArgs:
+    - --insecure
+
+# Disable Dex (external SSO). Use built-in admin for now.
+dex:
+  enabled: false
+
+# Disable notifications (not needed initially).
+notifications:
+  enabled: false
+
+# Single-node dev cluster — no HA.
+controller:
+  replicas: 1
+
+redis:
+  enabled: true

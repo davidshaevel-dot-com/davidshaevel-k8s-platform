@@ -1,0 +1,34 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: portainer
+  namespace: argocd
+spec:
+  project: platform
+  source:
+    # Helm chart source.
+    repoURL: https://portainer.github.io/k8s/
+    chart: portainer
+    targetRevision: 2.33.7
+    helm:
+      # Values from the repo (relative to the Git source below won't work with
+      # chart source). Instead, inline the values here. For complex values,
+      # consider using multiple sources.
+      values: |
+        enterpriseEdition:
+          enabled: true
+        image:
+          tag: lts
+        service:
+          type: ClusterIP
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: portainer
+  # Manual sync — don't auto-sync to avoid overwriting the kubectl patch
+  # for --trusted-origins. The Helm chart has a bug where --trusted-origins
+  # values get wrapped in escaped double quotes, breaking CSRF validation.
+  # The install script patches deployment args directly after Helm install.
+  # See also: helm-values/portainer/values.yaml
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true

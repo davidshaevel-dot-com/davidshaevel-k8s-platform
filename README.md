@@ -26,10 +26,18 @@ AKS Cluster (k8s-developer-platform-rg, eastus)
     |       +-- Teleport Agent (app + kube registration)
     |
     +-- portainer namespace
-            |
-            Portainer BE (ClusterIP, port 9443 HTTPS)
-                (no public IP, accessed via Teleport)
-                Manages: AKS (local) + GKE (remote agent)
+    |       |
+    |       Portainer BE (ClusterIP, port 9443 HTTPS)
+    |           (no public IP, accessed via Teleport)
+    |           Manages: AKS (local) + GKE (remote agent)
+    |
+    +-- argocd namespace
+    |       |
+    |       Argo CD (ClusterIP, HTTP)
+    |           (no public IP, accessed via Teleport)
+    |           GitOps: syncs platform components from Git
+    |
+    +-- (future namespaces: Crossplane, monitoring)
 
 GKE Cluster (us-central1-a)
     |
@@ -51,6 +59,7 @@ All traffic flows through Teleport. Portainer has no public endpoint. The GKE Po
 | Container Orchestration | Kubernetes (multi-cluster, Azure CNI Overlay + Cilium) |
 | Platform Management | Portainer Business Edition |
 | Secure Access | Teleport Community Edition (self-hosted) |
+| GitOps | Argo CD (declarative deployments from Git) |
 | CI/CD | GitHub Actions (workflow_dispatch) |
 | DNS | Cloudflare (API-managed) |
 | TLS | Let's Encrypt (ACME via Teleport) |
@@ -187,7 +196,14 @@ Then run the setup scripts:
    ./scripts/teleport/aks-agent-install.sh
    ```
 
-7. **Add a GKE cluster** (optional, multi-cluster setup):
+7. **Install Argo CD** (GitOps deployments):
+
+   ```bash
+   ./scripts/argocd/install.sh
+   ./scripts/argocd/teleport-register.sh
+   ```
+
+8. **Add a GKE cluster** (optional, multi-cluster setup):
 
    ```bash
    ./scripts/gke/start.sh
@@ -245,6 +261,15 @@ All scripts source `scripts/config.sh` for shared configuration. When running lo
 | `teleport/aks-agent-uninstall.sh` | Remove Teleport agent from AKS |
 | `teleport/gke-agent-install.sh` | Deploy Teleport kube agent on GKE |
 | `teleport/gke-agent-uninstall.sh` | Remove Teleport agent from GKE |
+
+### Argo CD (`scripts/argocd/`)
+
+| Script | Description |
+|--------|-------------|
+| `argocd/install.sh` | Install Argo CD via Helm on AKS |
+| `argocd/uninstall.sh` | Uninstall Argo CD |
+| `argocd/status.sh` | Show Argo CD deployment status and applications |
+| `argocd/teleport-register.sh` | Register Argo CD as a Teleport application |
 
 ### GitHub Actions Setup (`scripts/github/`)
 

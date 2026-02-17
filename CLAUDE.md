@@ -11,6 +11,7 @@ A multi-cloud Kubernetes developer platform following the [Build Your First Kube
 - **Container Orchestration:** Kubernetes (multi-cluster, Azure CNI Overlay + Cilium)
 - **Platform Management:** Portainer Business Edition (BE)
 - **Secure Access:** Teleport Community Edition (self-hosted)
+- **GitOps:** Argo CD (declarative deployments from Git)
 - **CI/CD:** GitHub Actions (workflow_dispatch)
 - **IaC:** Azure CLI, gcloud CLI, Helm
 - **DNS:** Cloudflare (API-managed)
@@ -50,7 +51,13 @@ AKS Cluster (k8s-developer-platform-rg, eastus)
     |           (no public IP, accessed via Teleport)
     |           Manages: AKS (local) + GKE (remote agent)
     |
-    +-- (future namespaces: Argo CD, Crossplane, monitoring)
+    +-- argocd namespace
+    |       |
+    |       Argo CD (ClusterIP, HTTP)
+    |           (no public IP, accessed via Teleport)
+    |           GitOps: syncs platform components from Git
+    |
+    +-- (future namespaces: Crossplane, monitoring)
 
 GKE Cluster (us-central1-a)
     |
@@ -112,6 +119,13 @@ helm list -A                       # All Helm releases
 helm status portainer -n portainer
 helm status teleport-cluster -n teleport-cluster
 helm status teleport-agent -n teleport-cluster
+helm status argocd -n argocd
+
+# Argo CD
+kubectl get applications -n argocd         # List Argo CD applications
+kubectl get appprojects -n argocd          # List Argo CD projects
+kubectl get pods -n argocd                 # Check Argo CD pods
+kubectl get svc -n argocd                  # Check Argo CD services
 
 # Teleport client (tsh) - requires tsh installed locally
 tsh login --proxy=<TELEPORT_DOMAIN> --user=admin
@@ -189,8 +203,15 @@ davidshaevel-k8s-platform/
 |   |   +-- aks/                       # AKS cluster lifecycle
 |   |   +-- gke/                       # GKE cluster lifecycle
 |   |   +-- github/                    # GitHub Actions setup (SP, SA, secrets)
+|   |   +-- argocd/                    # Argo CD install/uninstall/Teleport registration
 |   |   +-- portainer/                 # Portainer server + agent install/uninstall
 |   |   +-- teleport/                  # Teleport server + agent install/uninstall
+|   +-- helm-values/                   # Helm value overrides per tool
+|   |   +-- argocd/                    # Argo CD Helm values
+|   |   +-- portainer/                 # Portainer Helm values
+|   +-- argocd/                        # Argo CD application manifests
+|   |   +-- projects/                  # AppProject definitions
+|   |   +-- applications/              # Application definitions
 |   +-- .github/workflows/             # GitHub Actions workflows
 |   +-- docs/                          # Documentation
 |       +-- plans/                     # Design documents and plans
@@ -210,3 +231,5 @@ davidshaevel-k8s-platform/
 - **Google GKE Docs:** [Google Kubernetes Engine](https://cloud.google.com/kubernetes-engine/docs)
 - **Teleport Helm Deploy:** [Deploy on Kubernetes](https://goteleport.com/docs/deploy-a-cluster/helm-deployments/kubernetes-cluster/)
 - **Cloudflare DNS API:** [DNS Records](https://developers.cloudflare.com/api/resources/dns/subresources/records/)
+- **Argo CD Docs:** [Getting Started](https://argo-cd.readthedocs.io/en/stable/getting_started/)
+- **Argo CD Helm Chart:** [argo-helm](https://github.com/argoproj/argo-helm/tree/main/charts/argo-cd)
