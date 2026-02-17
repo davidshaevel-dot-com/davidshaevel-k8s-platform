@@ -41,12 +41,19 @@ helm upgrade --install --wait -n "${TELEPORT_NAMESPACE}" teleport-agent teleport
     --version="${TELEPORT_VERSION}"
 
 echo ""
-echo "Switching Portainer service to ClusterIP (removing public IP)..."
-helm upgrade portainer portainer/portainer \
-    -n portainer \
-    --reuse-values \
-    --set service.type=ClusterIP \
-    --wait
+echo "Ensuring Portainer service is ClusterIP (no public IP)..."
+PORTAINER_SVC_TYPE=$(kubectl get svc portainer -n portainer -o jsonpath='{.spec.type}')
+if [ "${PORTAINER_SVC_TYPE}" != "ClusterIP" ]; then
+    echo "  Switching from ${PORTAINER_SVC_TYPE} to ClusterIP..."
+    helm upgrade portainer portainer/portainer \
+        -n portainer \
+        --reuse-values \
+        --set service.type=ClusterIP \
+        --force \
+        --wait
+else
+    echo "  Already ClusterIP, skipping."
+fi
 
 # Grant admin user Kubernetes access via Teleport roles.
 # system:masters = full cluster-admin on AKS

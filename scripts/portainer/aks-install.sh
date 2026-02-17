@@ -33,7 +33,7 @@ helm upgrade --install --create-namespace --wait -n portainer portainer portaine
 echo ""
 echo "Patching trusted-origins args (workaround for Helm chart quoting bug)..."
 kubectl patch deployment portainer -n portainer --type='json' \
-    -p="[{\"op\": \"replace\", \"path\": \"/spec/template/spec/containers/0/args\", \"value\": [\"--http-disabled\", \"--tls-force\", \"--tlsskipverify\", \"--trusted-origins=${TRUSTED_ORIGIN}\"]}]"
+    -p="[{\"op\": \"replace\", \"path\": \"/spec/template/spec/containers/0/args\", \"value\": [\"--http-disabled\", \"--trusted-origins=${TRUSTED_ORIGIN}\"]}]"
 
 echo ""
 echo "Waiting for patched pod to be ready..."
