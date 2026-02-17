@@ -14,7 +14,7 @@ ACNS_STATUS=$(az aks show \
     --resource-group "${RESOURCE_GROUP}" \
     --name "${AKS_CLUSTER_NAME}" \
     --query "networkProfile.advancedNetworking.observability.enabled" \
-    -o tsv 2>/dev/null || echo "false")
+    -o tsv 2>/dev/null)
 
 if [[ "${ACNS_STATUS}" != "true" ]]; then
     echo "ACNS is already disabled. Nothing to do."

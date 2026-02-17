@@ -50,7 +50,11 @@ rules:
   - apiGroups:
       - cilium.io
     resources:
-      - "*"
+      - ciliumnetworkpolicies
+      - ciliumclusterwidenetworkpolicies
+      - ciliumendpoints
+      - ciliumidentities
+      - ciliumnodes
     verbs:
       - get
       - list
