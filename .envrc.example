@@ -1,0 +1,29 @@
+# Environment variables for davidshaevel-k8s-platform scripts.
+# Copy this file to .envrc and fill in your values:
+#   cp .envrc.example .envrc
+#
+# If using direnv, it will auto-source .envrc when you cd into the project.
+# Otherwise, source manually: source .envrc
+
+# Azure subscription name or ID used by all az CLI commands.
+export AZURE_SUBSCRIPTION="Your Azure Subscription Name"
+
+# Cloudflare API credentials for DNS record management (teleport.davidshaevel.com).
+# Create an API token at: https://dash.cloudflare.com/profile/api-tokens
+# Required permissions: Zone:DNS:Edit scoped to davidshaevel.com
+export CLOUDFLARE_API_TOKEN="Your Cloudflare API Token"
+
+# Zone ID found on the davidshaevel.com overview page in Cloudflare dashboard.
+export CLOUDFLARE_ZONE_ID="Your Cloudflare Zone ID"
+
+# Email address for Let's Encrypt ACME certificate notifications (Teleport TLS).
+export TELEPORT_ACME_EMAIL="your-email@example.com"
+
+# GCP project ID for GKE cluster.
+export GCP_PROJECT="your-gcp-project-id"
+
+# Portainer admin password for REST API automation (gke-agent-register/deregister).
+export PORTAINER_ADMIN_PASSWORD="your-portainer-admin-password"
+
+# Teleport domain for cluster access (defaults to teleport.davidshaevel.com in config.sh).
+export TELEPORT_DOMAIN="teleport.davidshaevel.com"
