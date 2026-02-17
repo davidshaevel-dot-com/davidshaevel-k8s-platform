@@ -1,0 +1,100 @@
+name: GKE Start
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  AZURE_SUBSCRIPTION: ${{ secrets.AZURE_SUBSCRIPTION }}
+  GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+  TELEPORT_ACME_EMAIL: ${{ secrets.TELEPORT_ACME_EMAIL }}
+  PORTAINER_ADMIN_PASSWORD: ${{ secrets.PORTAINER_ADMIN_PASSWORD }}
+  TELEPORT_DOMAIN: teleport.davidshaevel.com
+
+jobs:
+  start-gke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: GCP Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS_JSON }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: 'gke-gcloud-auth-plugin'
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      - name: Get AKS Credentials
+        run: ./scripts/aks/credentials.sh
+
+      - name: Create GKE Cluster
+        run: ./scripts/gke/create.sh
+
+      - name: Get GKE Credentials
+        run: ./scripts/gke/credentials.sh
+
+      - name: Install Portainer Agent
+        run: ./scripts/portainer/gke-agent-install.sh
+
+      - name: Register GKE in Portainer
+        run: ./scripts/portainer/gke-agent-register.sh
+
+      - name: Restrict Agent LoadBalancer
+        run: ./scripts/portainer/gke-agent-restrict-lb.sh
+
+      - name: Install Teleport Agent
+        run: ./scripts/teleport/gke-agent-install.sh
+
+      - name: Verify
+        run: |
+          echo "=== Teleport Kube Clusters ==="
+          az aks get-credentials \
+            --subscription "${AZURE_SUBSCRIPTION}" \
+            --resource-group k8s-developer-platform-rg \
+            --name k8s-developer-platform-aks \
+            --overwrite-existing
+          kubectl exec -n teleport-cluster deployment/teleport-cluster-auth -- tctl kube ls || true
+
+          echo ""
+          echo "=== GKE Pods ==="
+          gcloud container clusters get-credentials portainer-gke \
+            --zone us-central1-a \
+            --project "${GCP_PROJECT}"
+          kubectl get pods --all-namespaces
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## GKE Start Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **GKE Cluster:** portainer-gke" >> $GITHUB_STEP_SUMMARY
+          echo "- **Portainer Agent:** Installed and registered" >> $GITHUB_STEP_SUMMARY
+          echo "- **Teleport Agent:** Installed (portainer-gke)" >> $GITHUB_STEP_SUMMARY
+
+      - name: Cleanup on Failure
+        if: failure()
+        run: |
+          echo "Workflow failed. Deleting GKE cluster to avoid costs..."
+          gcloud container clusters delete portainer-gke \
+            --project="${GCP_PROJECT}" \
+            --zone=us-central1-a \
+            --quiet || echo "Cleanup failed or cluster does not exist."

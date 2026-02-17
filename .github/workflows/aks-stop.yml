@@ -1,0 +1,50 @@
+name: AKS Stop
+
+on:
+  workflow_dispatch:
+    inputs:
+      delete_dns:
+        description: 'Delete Cloudflare DNS records for Teleport?'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+permissions:
+  contents: read
+
+env:
+  AZURE_SUBSCRIPTION: ${{ secrets.AZURE_SUBSCRIPTION }}
+  GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+  TELEPORT_ACME_EMAIL: ${{ secrets.TELEPORT_ACME_EMAIL }}
+
+jobs:
+  stop-aks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Delete Cloudflare DNS Records
+        if: ${{ github.event.inputs.delete_dns == 'true' }}
+        run: ./scripts/teleport/dns-delete.sh
+
+      - name: Stop AKS Cluster
+        run: ./scripts/aks/stop.sh
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## AKS Stop Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cluster:** k8s-developer-platform-aks (stopped)" >> $GITHUB_STEP_SUMMARY
+          echo "- **DNS deleted:** ${{ github.event.inputs.delete_dns }}" >> $GITHUB_STEP_SUMMARY

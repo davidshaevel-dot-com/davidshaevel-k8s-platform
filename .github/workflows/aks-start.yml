@@ -1,0 +1,75 @@
+name: AKS Start
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  AZURE_SUBSCRIPTION: ${{ secrets.AZURE_SUBSCRIPTION }}
+  GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+  TELEPORT_ACME_EMAIL: ${{ secrets.TELEPORT_ACME_EMAIL }}
+  TELEPORT_DOMAIN: teleport.davidshaevel.com
+
+jobs:
+  start-aks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      - name: Start AKS Cluster
+        run: ./scripts/aks/start.sh
+
+      - name: Get AKS Credentials
+        run: ./scripts/aks/credentials.sh
+
+      - name: Wait for Pods
+        run: |
+          echo "Waiting for pods to be ready..."
+          kubectl wait --for=condition=ready pod --all --all-namespaces --timeout=5m || true
+          echo ""
+          kubectl get pods --all-namespaces
+
+      - name: Update Cloudflare DNS
+        run: ./scripts/teleport/dns.sh
+
+      - name: Wait for DNS Propagation
+        run: sleep 60
+
+      - name: Verify Teleport
+        run: |
+          MAX_ATTEMPTS=10
+          for ATTEMPT in $(seq 1 $MAX_ATTEMPTS); do
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              --max-time 10 \
+              "https://${TELEPORT_DOMAIN}/web/login" || echo "000")
+            echo "Attempt ${ATTEMPT}/${MAX_ATTEMPTS}: HTTP ${HTTP_STATUS}"
+            if [ "${HTTP_STATUS}" = "200" ]; then
+              echo "Teleport is accessible!"
+              break
+            fi
+            sleep 15
+          done
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## AKS Start Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cluster:** k8s-developer-platform-aks" >> $GITHUB_STEP_SUMMARY
+          echo "- **Access:** https://${TELEPORT_DOMAIN}" >> $GITHUB_STEP_SUMMARY

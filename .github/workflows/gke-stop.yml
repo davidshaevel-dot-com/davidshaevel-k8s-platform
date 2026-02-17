@@ -1,0 +1,73 @@
+name: GKE Stop
+
+on:
+  workflow_dispatch:
+    inputs:
+      deregister_portainer:
+        description: 'Remove GKE endpoint from Portainer?'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+permissions:
+  contents: read
+
+env:
+  AZURE_SUBSCRIPTION: ${{ secrets.AZURE_SUBSCRIPTION }}
+  GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+  TELEPORT_ACME_EMAIL: ${{ secrets.TELEPORT_ACME_EMAIL }}
+  PORTAINER_ADMIN_PASSWORD: ${{ secrets.PORTAINER_ADMIN_PASSWORD }}
+
+jobs:
+  stop-gke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        if: ${{ github.event.inputs.deregister_portainer == 'true' }}
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup kubectl
+        if: ${{ github.event.inputs.deregister_portainer == 'true' }}
+        uses: azure/setup-kubectl@v4
+
+      - name: Setup Helm
+        if: ${{ github.event.inputs.deregister_portainer == 'true' }}
+        uses: azure/setup-helm@v4
+
+      - name: Get AKS Credentials
+        if: ${{ github.event.inputs.deregister_portainer == 'true' }}
+        run: ./scripts/aks/credentials.sh
+
+      - name: Deregister GKE from Portainer
+        if: ${{ github.event.inputs.deregister_portainer == 'true' }}
+        run: ./scripts/portainer/gke-agent-deregister.sh
+
+      - name: GCP Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS_JSON }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Delete GKE Cluster
+        run: ./scripts/gke/stop.sh
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## GKE Stop Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cluster:** portainer-gke (deleted)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Portainer deregistered:** ${{ github.event.inputs.deregister_portainer }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cost:** \$0" >> $GITHUB_STEP_SUMMARY
