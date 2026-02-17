@@ -21,5 +21,17 @@ spec:
     - group: ''
       kind: Namespace
   namespaceResourceWhitelist:
-    - group: '*'
-      kind: '*'
+    - group: ''
+      kind: ConfigMap
+    - group: ''
+      kind: Secret
+    - group: ''
+      kind: Service
+    - group: ''
+      kind: ServiceAccount
+    - group: ''
+      kind: PersistentVolumeClaim
+    - group: apps
+      kind: Deployment
+    - group: apps
+      kind: StatefulSet
