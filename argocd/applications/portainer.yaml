@@ -25,7 +25,10 @@ spec:
     server: https://kubernetes.default.svc
     namespace: portainer
   # Manual sync — don't auto-sync to avoid overwriting the kubectl patch
-  # for --trusted-origins (see helm-values/portainer/values.yaml).
+  # for --trusted-origins. The Helm chart has a bug where --trusted-origins
+  # values get wrapped in escaped double quotes, breaking CSRF validation.
+  # The install script patches deployment args directly after Helm install.
+  # See also: helm-values/portainer/values.yaml
   syncPolicy:
     syncOptions:
       - CreateNamespace=true

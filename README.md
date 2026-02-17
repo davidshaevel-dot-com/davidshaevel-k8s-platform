@@ -32,10 +32,12 @@ AKS Cluster (k8s-developer-platform-rg, eastus)
     |           Manages: AKS (local) + GKE (remote agent)
     |
     +-- argocd namespace
-            |
-            Argo CD (ClusterIP, HTTP)
-                (no public IP, accessed via Teleport)
-                GitOps: syncs platform components from Git
+    |       |
+    |       Argo CD (ClusterIP, HTTP)
+    |           (no public IP, accessed via Teleport)
+    |           GitOps: syncs platform components from Git
+    |
+    +-- (future namespaces: Crossplane, monitoring)
 
 GKE Cluster (us-central1-a)
     |

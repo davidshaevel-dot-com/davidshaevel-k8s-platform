@@ -11,9 +11,8 @@ spec:
       server: https://kubernetes.default.svc
     - namespace: argocd
       server: https://kubernetes.default.svc
-  # Allow any source repo in the org.
   sourceRepos:
-    - https://github.com/davidshaevel-dot-com/*
+    - https://github.com/davidshaevel-dot-com/davidshaevel-k8s-platform
     - https://portainer.github.io/k8s/
     - https://argoproj.github.io/argo-helm
   # Allow common Kubernetes resource types.
