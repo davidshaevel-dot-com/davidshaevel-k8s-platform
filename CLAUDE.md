@@ -105,10 +105,10 @@ kubectl get all -n portainer      # Check Portainer resources
 kubectl get all -n teleport-cluster  # Check Teleport resources
 
 # ACR (Azure Container Registry)
-az acr show --name k8sdevplatformacr --output table
-az acr repository list --name k8sdevplatformacr --output table
-az acr repository show-tags --name k8sdevplatformacr --repository davidshaevel-website/frontend
-az acr repository show-tags --name k8sdevplatformacr --repository davidshaevel-website/backend
+az acr show --name <acr-name> --output table
+az acr repository list --name <acr-name> --output table
+az acr repository show-tags --name <acr-name> --repository <repository-name>/frontend
+az acr repository show-tags --name <acr-name> --repository <repository-name>/backend
 
 # Cilium (verify CNI)
 kubectl get pods -n kube-system -l k8s-app=cilium
