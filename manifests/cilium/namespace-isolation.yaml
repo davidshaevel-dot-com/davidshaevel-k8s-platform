@@ -3,10 +3,11 @@
 # Design:
 #   - Default deny ingress per namespace (standard Kubernetes NetworkPolicy)
 #   - Allow intra-namespace communication (pods within the same namespace)
-#   - Allow DNS resolution to kube-dns/CoreDNS in kube-system
 #   - Allow ingress from teleport-cluster to portainer (Teleport agent -> Portainer)
-#   - Allow external ingress to Teleport proxy on port 443 (LoadBalancer)
-#   - No egress deny (too many dependencies: images, ACME, Azure metadata, etc.)
+#   - Allow external ingress to Teleport proxy on port 3080 (LoadBalancer)
+#   - No egress restrictions (too many dependencies: images, ACME, Azure metadata, etc.)
+#   - No CiliumNetworkPolicy egress rules (any egress rule triggers Cilium's
+#     implicit default-deny for all other egress, which breaks outbound traffic)
 #   - No policies on kube-system (Azure-managed: Cilium, CoreDNS, etc.)
 #
 # Namespaces covered: portainer, teleport-cluster
@@ -47,19 +48,6 @@ spec:
   ingress:
     - fromEndpoints:
         - {}
-
----
-# Allow pods in portainer namespace to reach kube-dns for DNS resolution.
-apiVersion: cilium.io/v2
-kind: CiliumNetworkPolicy
-metadata:
-  name: allow-dns
-  namespace: portainer
-spec:
-  endpointSelector: {}
-  egress:
-    - toEntities:
-        - kube-dns
 
 ---
 # Allow ingress from teleport-cluster namespace to portainer on port 9443.
@@ -113,21 +101,10 @@ spec:
         - {}
 
 ---
-# Allow pods in teleport-cluster namespace to reach kube-dns for DNS resolution.
-apiVersion: cilium.io/v2
-kind: CiliumNetworkPolicy
-metadata:
-  name: allow-dns
-  namespace: teleport-cluster
-spec:
-  endpointSelector: {}
-  egress:
-    - toEntities:
-        - kube-dns
-
----
-# Allow external ingress to Teleport proxy on port 443.
+# Allow external ingress to Teleport proxy on port 3080.
 # Teleport proxy is the only public-facing service (Azure LoadBalancer).
+# The Service maps external port 443 -> targetPort 3080. CiliumNetworkPolicy
+# toPorts matches at the pod level (container port), not the service port.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -143,5 +120,5 @@ spec:
         - world
       toPorts:
         - ports:
-            - port: "443"
+            - port: "3080"
               protocol: TCP
