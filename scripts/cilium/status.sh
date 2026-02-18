@@ -15,15 +15,19 @@ kubectl get cm -n kube-system cilium-config -o yaml 2>/dev/null \
 
 echo ""
 echo "=== Hubble Relay ==="
-kubectl get pods -n kube-system -l k8s-app=hubble-relay -o wide 2>/dev/null
-if ! kubectl get pods -n kube-system -l k8s-app=hubble-relay --no-headers 2>/dev/null | grep -q .; then
+RELAY_PODS=$(kubectl get pods -n kube-system -l k8s-app=hubble-relay -o wide 2>/dev/null)
+if [ -n "${RELAY_PODS}" ]; then
+    echo "${RELAY_PODS}"
+else
     echo "  (no hubble-relay pods found)"
 fi
 
 echo ""
 echo "=== Hubble UI ==="
-kubectl get pods -n kube-system -l k8s-app=hubble-ui -o wide 2>/dev/null
-if ! kubectl get pods -n kube-system -l k8s-app=hubble-ui --no-headers 2>/dev/null | grep -q .; then
+UI_PODS=$(kubectl get pods -n kube-system -l k8s-app=hubble-ui -o wide 2>/dev/null)
+if [ -n "${UI_PODS}" ]; then
+    echo "${UI_PODS}"
+else
     echo "  (no hubble-ui pods found)"
 fi
 
