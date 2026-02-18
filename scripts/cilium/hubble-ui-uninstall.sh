@@ -21,7 +21,7 @@ kubectl delete -f "${SCRIPT_DIR}/hubble-ui.yaml" --ignore-not-found=true
 
 echo ""
 echo "Verifying Hubble UI resources are removed..."
-if ! kubectl wait --for=delete pod -l k8s-app=hubble-ui -n kube-system --timeout=2m 2>/dev/null; then
+if ! kubectl wait --for=delete pod -l k8s-app=hubble-ui -n kube-system --timeout=2m; then
     echo "Warning: Hubble UI pods did not delete in time. Check manually."
 fi
 

@@ -19,7 +19,7 @@ done
 # These were removed because any CiliumNetworkPolicy egress rule triggers
 # Cilium's implicit default-deny for all other egress.
 for ns in portainer teleport-cluster; do
-    kubectl delete ciliumnetworkpolicy allow-dns -n "${ns}" --ignore-not-found=true 2>/dev/null
+    kubectl delete ciliumnetworkpolicy allow-dns -n "${ns}" --ignore-not-found=true
 done
 
 echo "Applying namespace isolation policies..."
