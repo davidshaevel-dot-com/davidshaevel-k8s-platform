@@ -9,6 +9,7 @@ A multi-cloud Kubernetes developer platform following the [Build Your First Kube
 **Key Technologies:**
 - **Cloud:** Azure (AKS), Google Cloud (GKE)
 - **Container Orchestration:** Kubernetes (multi-cluster, Azure CNI Overlay + Cilium)
+- **Container Registry:** Azure Container Registry (ACR) — primary image registry
 - **Platform Management:** Portainer Business Edition (BE)
 - **Secure Access:** Teleport Community Edition (self-hosted)
 - **GitOps:** Argo CD (declarative deployments from Git)
@@ -110,6 +111,12 @@ kubectl get sc                    # Check StorageClass
 kubectl get all -n portainer      # Check Portainer resources
 kubectl get all -n teleport-cluster  # Check Teleport resources
 
+# ACR (Azure Container Registry)
+az acr show --name <acr-name> --output table
+az acr repository list --name <acr-name> --output table
+az acr repository show-tags --name <acr-name> --repository <repository-name>/frontend
+az acr repository show-tags --name <acr-name> --repository <repository-name>/backend
+
 # Cilium (verify CNI)
 kubectl get pods -n kube-system -l k8s-app=cilium
 cilium status                     # If cilium CLI installed
@@ -200,6 +207,7 @@ davidshaevel-k8s-platform/
 |   +-- .gitignore                     # Git ignore patterns
 |   +-- scripts/                       # Reusable az/kubectl/helm/gcloud scripts
 |   |   +-- config.sh                  # Shared configuration (sourced by all scripts)
+|   |   +-- acr/                       # Azure Container Registry lifecycle
 |   |   +-- aks/                       # AKS cluster lifecycle
 |   |   +-- gke/                       # GKE cluster lifecycle
 |   |   +-- github/                    # GitHub Actions setup (SP, SA, secrets)
@@ -218,6 +226,13 @@ davidshaevel-k8s-platform/
 |
 +-- <feature-worktrees>/               # Feature branch worktrees (flat!)
 ```
+
+---
+
+## Related Repositories
+
+- **[davidshaevel-website](https://github.com/davidshaevel-dot-com/davidshaevel-website)** — davidshaevel.com application code (Next.js + NestJS), Docker image build workflow
+- **[davidshaevel-ecs-platform](https://github.com/davidshaevel-dot-com/davidshaevel-ecs-platform)** — AWS ECS/Fargate infrastructure (archived, renamed from davidshaevel-platform)
 
 ---
 
