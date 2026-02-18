@@ -58,6 +58,11 @@ AKS Cluster (k8s-developer-platform-rg, eastus)
     |           (no public IP, accessed via Teleport)
     |           GitOps: syncs platform components from Git
     |
+    +-- kube-system namespace (Azure-managed)
+    |       +-- Cilium (eBPF CNI, Azure CNI Overlay)
+    |       +-- Hubble Relay (network flow observability, via ACNS)
+    |       +-- Hubble UI (network flow visualization)
+    |
     +-- (future namespaces: Crossplane, monitoring)
 
 GKE Cluster (us-central1-a)
@@ -117,9 +122,18 @@ az acr repository list --name <acr-name> --output table
 az acr repository show-tags --name <acr-name> --repository <repository-name>/frontend
 az acr repository show-tags --name <acr-name> --repository <repository-name>/backend
 
-# Cilium (verify CNI)
+# Cilium / Hubble
 kubectl get pods -n kube-system -l k8s-app=cilium
-cilium status                     # If cilium CLI installed
+cilium status                     # Cilium CLI
+cilium hubble status              # Hubble relay status
+cilium hubble observe             # Live network flow observation
+cilium hubble ui                  # Open Hubble UI in browser (port-forward)
+./scripts/cilium/status.sh        # Full Cilium + Hubble + policy status
+
+# Network Policies
+kubectl get networkpolicies -A              # Standard K8s policies
+kubectl get ciliumnetworkpolicies -A        # Cilium policies
+./scripts/cilium/apply-policies.sh          # Apply namespace isolation policies
 
 # Helm
 helm list -A                       # All Helm releases
@@ -214,8 +228,12 @@ davidshaevel-k8s-platform/
 |   |   +-- argocd/                    # Argo CD install/uninstall/Teleport registration
 |   |   +-- portainer/                 # Portainer server + agent install/uninstall
 |   |   +-- teleport/                  # Teleport server + agent install/uninstall
+|   |   +-- cilium/                    # Cilium/Hubble enable/disable, network policies
+|   +-- manifests/                     # Kubernetes manifests (non-Helm)
+|   |   +-- cilium/                    # CiliumNetworkPolicy manifests
 |   +-- helm-values/                   # Helm value overrides per tool
 |   |   +-- argocd/                    # Argo CD Helm values
+|   |   +-- cilium/                    # Cilium/Hubble configuration docs
 |   |   +-- portainer/                 # Portainer Helm values
 |   +-- argocd/                        # Argo CD application manifests
 |   |   +-- projects/                  # AppProject definitions
@@ -248,3 +266,5 @@ davidshaevel-k8s-platform/
 - **Cloudflare DNS API:** [DNS Records](https://developers.cloudflare.com/api/resources/dns/subresources/records/)
 - **Argo CD Docs:** [Getting Started](https://argo-cd.readthedocs.io/en/stable/getting_started/)
 - **Argo CD Helm Chart:** [argo-helm](https://github.com/argoproj/argo-helm/tree/main/charts/argo-cd)
+- **Azure ACNS Docs:** [Advanced Container Networking Services](https://learn.microsoft.com/en-us/azure/aks/use-advanced-container-networking-services)
+- **Cilium Network Policies:** [CiliumNetworkPolicy](https://docs.cilium.io/en/stable/security/policy/)

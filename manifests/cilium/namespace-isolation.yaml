@@ -1,0 +1,124 @@
+# Network policies for namespace isolation.
+#
+# Design:
+#   - Default deny ingress per namespace (standard Kubernetes NetworkPolicy)
+#   - Allow intra-namespace communication (pods within the same namespace)
+#   - Allow ingress from teleport-cluster to portainer (Teleport agent -> Portainer)
+#   - Allow external ingress to Teleport proxy on port 3080 (LoadBalancer)
+#   - No egress restrictions (too many dependencies: images, ACME, Azure metadata, etc.)
+#   - No CiliumNetworkPolicy egress rules (any egress rule triggers Cilium's
+#     implicit default-deny for all other egress, which breaks outbound traffic)
+#   - No policies on kube-system (Azure-managed: Cilium, CoreDNS, etc.)
+#
+# Namespaces covered: portainer, teleport-cluster
+#
+# Default deny uses standard Kubernetes NetworkPolicy (podSelector: {},
+# policyTypes: [Ingress]) which Cilium enforces natively. Allow rules use
+# CiliumNetworkPolicy for Cilium-specific features (namespace label matching,
+# entity selectors). Policies are additive — if any policy allows traffic,
+# it is permitted.
+
+---
+# =============================================================================
+# PORTAINER NAMESPACE
+# =============================================================================
+
+# Default deny all ingress to portainer namespace.
+# Standard Kubernetes NetworkPolicy with empty podSelector selects all pods.
+# Declaring policyTypes: [Ingress] with no ingress rules denies all inbound.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: portainer
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+
+---
+# Allow pods within the portainer namespace to communicate with each other.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-intra-namespace
+  namespace: portainer
+spec:
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - {}
+
+---
+# Allow ingress from teleport-cluster namespace to portainer on port 9443.
+# The Teleport agent proxies user traffic to Portainer's ClusterIP service.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-from-teleport
+  namespace: portainer
+spec:
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: teleport-cluster
+      toPorts:
+        - ports:
+            - port: "9443"
+              protocol: TCP
+
+---
+# =============================================================================
+# TELEPORT-CLUSTER NAMESPACE
+# =============================================================================
+
+# Default deny all ingress to teleport-cluster namespace.
+# Standard Kubernetes NetworkPolicy with empty podSelector selects all pods.
+# Declaring policyTypes: [Ingress] with no ingress rules denies all inbound.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: teleport-cluster
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+
+---
+# Allow pods within the teleport-cluster namespace to communicate with each other.
+# Teleport auth, proxy, and agent pods need to talk to each other.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-intra-namespace
+  namespace: teleport-cluster
+spec:
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - {}
+
+---
+# Allow external ingress to Teleport proxy on port 3080.
+# Teleport proxy is the only public-facing service (Azure LoadBalancer).
+# The Service maps external port 443 -> targetPort 3080. CiliumNetworkPolicy
+# toPorts matches at the pod level (container port), not the service port.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-external-ingress
+  namespace: teleport-cluster
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/component: proxy
+      app.kubernetes.io/instance: teleport-cluster
+  ingress:
+    - fromEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "3080"
+              protocol: TCP
