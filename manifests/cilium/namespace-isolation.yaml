@@ -122,3 +122,33 @@ spec:
         - ports:
             - port: "3080"
               protocol: TCP
+
+---
+# =============================================================================
+# DAVIDSHAEVEL-WEBSITE NAMESPACE
+# =============================================================================
+
+# Default deny all ingress to davidshaevel-website namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: davidshaevel-website
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+
+---
+# Allow pods within the davidshaevel-website namespace to communicate.
+# Frontend needs to reach backend on port 3001.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-intra-namespace
+  namespace: davidshaevel-website
+spec:
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - {}

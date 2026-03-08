@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: davidshaevel-website
+  namespace: argocd
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/davidshaevel-dot-com/davidshaevel-k8s-platform
+    targetRevision: main
+    path: manifests/davidshaevel-website
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: davidshaevel-website
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

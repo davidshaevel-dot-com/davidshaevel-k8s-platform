@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: davidshaevel-website
+  labels:
+    app: davidshaevel-website
+    component: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: davidshaevel-website
+      component: frontend
+  template:
+    metadata:
+      labels:
+        app: davidshaevel-website
+        component: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: k8sdevplatformacr.azurecr.io/davidshaevel-website/frontend:b80f6d5
+          ports:
+            - containerPort: 3000
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: davidshaevel-website
+  labels:
+    app: davidshaevel-website
+    component: frontend
+spec:
+  type: ClusterIP
+  selector:
+    app: davidshaevel-website
+    component: frontend
+  ports:
+    - port: 3000
+      targetPort: 3000

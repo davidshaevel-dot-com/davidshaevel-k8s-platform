@@ -11,6 +11,8 @@ spec:
       server: https://kubernetes.default.svc
     - namespace: argocd
       server: https://kubernetes.default.svc
+    - namespace: davidshaevel-website
+      server: https://kubernetes.default.svc
   sourceRepos:
     - https://github.com/davidshaevel-dot-com/davidshaevel-k8s-platform
     - https://portainer.github.io/k8s/

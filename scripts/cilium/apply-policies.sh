@@ -7,7 +7,7 @@ setup_logging "cilium-apply-policies"
 MANIFEST_DIR="$(dirname "$0")/../../manifests/cilium"
 
 # Verify target namespaces exist before applying policies.
-for ns in portainer teleport-cluster; do
+for ns in portainer teleport-cluster davidshaevel-website; do
     if ! kubectl get namespace "${ns}" &>/dev/null; then
         echo "ERROR: Namespace '${ns}' does not exist."
         echo "Install the namespace workloads first."
@@ -18,7 +18,7 @@ done
 # Remove stale allow-dns CiliumNetworkPolicies if present.
 # These were removed because any CiliumNetworkPolicy egress rule triggers
 # Cilium's implicit default-deny for all other egress.
-for ns in portainer teleport-cluster; do
+for ns in portainer teleport-cluster davidshaevel-website; do
     kubectl delete ciliumnetworkpolicy allow-dns -n "${ns}" --ignore-not-found=true
 done
 
