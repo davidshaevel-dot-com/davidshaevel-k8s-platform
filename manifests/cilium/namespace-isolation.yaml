@@ -152,3 +152,24 @@ spec:
   ingress:
     - fromEndpoints:
         - {}
+
+---
+# Allow ingress from teleport-cluster namespace to frontend on port 3000.
+# The Teleport agent proxies user traffic to the website's ClusterIP service.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-from-teleport
+  namespace: davidshaevel-website
+spec:
+  endpointSelector:
+    matchLabels:
+      component: frontend
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: teleport-cluster
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
