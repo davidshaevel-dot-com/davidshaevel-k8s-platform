@@ -31,9 +31,13 @@ prometheus:
       limits:
         cpu: 500m
         memory: 512Mi
-    # No persistent storage — Azure Standard_B2ms has limited disk attachment
-    # count and we've hit the max. Prometheus data is ephemeral; metrics are
-    # lost on pod restart but re-scraped quickly. Use PVC if scaling to 2+ nodes.
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 5Gi
 
 # Node exporter — enabled by default, provides node-level metrics.
 nodeExporter:
