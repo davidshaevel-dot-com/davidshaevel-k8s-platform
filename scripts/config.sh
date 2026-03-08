@@ -9,7 +9,7 @@ RESOURCE_GROUP="k8s-developer-platform-rg"
 AKS_CLUSTER_NAME="k8s-developer-platform-aks"
 AKS_LOCATION="eastus"
 AKS_NODE_COUNT=1
-AKS_NODE_VM_SIZE="Standard_B2ms"
+AKS_NODE_VM_SIZE="Standard_B4ls_v2"
 SUBSCRIPTION="${AZURE_SUBSCRIPTION:?Set AZURE_SUBSCRIPTION in .envrc or environment}"
 
 # --- GCP / GKE ---

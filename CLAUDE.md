@@ -77,7 +77,7 @@ GKE Cluster (us-central1-a)
 
 All traffic flows through Teleport. Portainer has no public endpoint. The GKE Portainer Agent LoadBalancer is restricted to the AKS cluster's egress IP via `loadBalancerSourceRanges`.
 
-**Key difference from davidshaevel-portainer:** This cluster uses Standard_B2ms (8 GiB) with Azure CNI Overlay + Cilium networking, sized for the full platform stack (Argo CD, Crossplane, monitoring).
+**Key difference from davidshaevel-portainer:** This cluster uses Standard_B4ls_v2 (4 vCPUs, 8 GiB, 8 data disks) with Azure CNI Overlay + Cilium networking, sized for the full platform stack (Argo CD, Crossplane, monitoring). Upgraded from B2ms to support more persistent volume attachments.
 
 ---
 
