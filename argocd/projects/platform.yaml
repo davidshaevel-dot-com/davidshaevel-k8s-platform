@@ -35,4 +35,8 @@ spec:
     - group: apps
       kind: Deployment
     - group: apps
+      kind: ReplicaSet
+    - group: apps
       kind: StatefulSet
+    - group: ''
+      kind: Pod
