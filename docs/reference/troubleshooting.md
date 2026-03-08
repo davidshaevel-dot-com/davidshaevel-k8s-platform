@@ -52,4 +52,47 @@ echo | openssl s_client -connect argocd.teleport.davidshaevel.com:443 \
 
 **All 2-vCPU Azure VMs are limited to 4 data disks.** To get 8 disks, you must use a 4-vCPU VM.
 
+**Procedure used: Upgrade node pool VM size (zero-downtime)**
+
+AKS doesn't support in-place VM size changes. You must add a new node pool, migrate workloads, and delete the old one.
+
+```bash
+# 1. Add a new system node pool with the larger VM size
+az aks nodepool add \
+    --subscription "${AZURE_SUBSCRIPTION}" \
+    --resource-group k8s-developer-platform-rg \
+    --cluster-name k8s-developer-platform-aks \
+    --name nodepool2 \
+    --mode System \
+    --node-count 1 \
+    --node-vm-size Standard_B4ls_v2
+
+# 2. Wait for the new node to become Ready
+kubectl get nodes -w
+
+# 3. Cordon and drain the old node (pods reschedule to new node)
+kubectl cordon <old-node-name>
+kubectl drain <old-node-name> --ignore-daemonsets --delete-emptydir-data --timeout=120s
+
+# 4. Verify all pods are healthy on the new node
+kubectl get pods -A --field-selector=status.phase!=Running,status.phase!=Succeeded
+
+# 5. Delete the old node pool
+az aks nodepool delete \
+    --subscription "${AZURE_SUBSCRIPTION}" \
+    --resource-group k8s-developer-platform-rg \
+    --cluster-name k8s-developer-platform-aks \
+    --name nodepool1
+
+# 6. Update DNS (LoadBalancer IP may have changed)
+./scripts/teleport/dns.sh
+
+# 7. Update scripts/config.sh with new VM size
+```
+
+**Notes:**
+- PVC-backed pods (database, Grafana, Prometheus) will have their managed disks reattached to the new node automatically.
+- Some system pods (metrics-server, konnectivity-agent) may retry eviction due to PodDisruptionBudgets — the drain command retries until they can be safely moved.
+- Total time: ~5-10 minutes (node pool creation + drain + deletion).
+
 **First encountered:** 2026-03-08, when adding Prometheus PVC to a cluster that already had PVCs for Teleport, Portainer, Grafana, and PostgreSQL.
