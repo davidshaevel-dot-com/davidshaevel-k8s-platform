@@ -10,6 +10,15 @@ grafana:
   persistence:
     enabled: true
     size: 1Gi
+  # Allow Teleport app proxy origin — Grafana's CSRF check rejects requests
+  # when the origin (grafana.teleport.davidshaevel.com) doesn't match the
+  # internal hostname. Setting root_url and allowing the Teleport domain fixes this.
+  grafana.ini:
+    server:
+      root_url: https://grafana.teleport.davidshaevel.com
+    security:
+      cookie_secure: true
+      cookie_samesite: none
 
 # Prometheus — keep defaults, adjust retention for dev cluster.
 prometheus:
