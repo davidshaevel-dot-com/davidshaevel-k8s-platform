@@ -30,6 +30,8 @@ spec:
               value: postgres
             - name: POSTGRES_DB
               value: davidshaevel
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
           livenessProbe:
             exec:
               command: ["pg_isready", "-U", "postgres"]
