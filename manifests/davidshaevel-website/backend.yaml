@@ -26,11 +26,21 @@ spec:
           env:
             - name: NODE_ENV
               value: production
+            - name: DB_HOST
+              value: database
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_USERNAME
+              value: postgres
+            - name: DB_PASSWORD
+              value: postgres
+            - name: DB_NAME
+              value: davidshaevel
           livenessProbe:
             httpGet:
               path: /api/health
               port: 3001
-            initialDelaySeconds: 15
+            initialDelaySeconds: 30
             periodSeconds: 10
           readinessProbe:
             httpGet:
