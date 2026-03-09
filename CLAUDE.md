@@ -80,12 +80,19 @@ AKS Cluster (k8s-developer-platform-rg, eastus)
 
 GKE Cluster (us-central1-a)
     |
+    +-- davidshaevel-website namespace
+    |       |
+    |       +-- Frontend (Next.js, port 3000)
+    |       +-- Backend (NestJS, port 3001)
+    |       +-- Database (PostgreSQL 15, 1Gi PVC)
+    |
     +-- portainer namespace
     |       +-- Portainer Agent (LoadBalancer, port 9001)
     |               (loadBalancerSourceRanges: AKS egress IP only)
     |
     +-- teleport-cluster namespace
             +-- Teleport Kube Agent (kubectl access via Teleport)
+            +-- Website App (davidshaevel-website-gke via Teleport)
 ```
 
 All traffic flows through Teleport. Portainer has no public endpoint. The GKE Portainer Agent LoadBalancer is restricted to the AKS cluster's egress IP via `loadBalancerSourceRanges`.
@@ -225,6 +232,8 @@ With [direnv](https://direnv.net/), `.envrc` is auto-sourced. Otherwise: `source
 | `CLOUDFLARE_ZONE_ID` | `scripts/teleport/dns.sh` | Cloudflare zone ID for davidshaevel.com |
 | `TELEPORT_ACME_EMAIL` | `scripts/teleport/install.sh` | Email for Let's Encrypt ACME certificate notifications |
 | `PORTAINER_ADMIN_PASSWORD` | `scripts/portainer/gke-agent-register.sh` | Portainer admin password for REST API automation |
+| `ACR_SP_APP_ID` | `scripts/gke/acr-pull-secret.sh` | Dedicated `gke-acr-pull` SP app ID (AcrPull on ACR) |
+| `ACR_SP_PASSWORD` | `scripts/gke/acr-pull-secret.sh` | Dedicated `gke-acr-pull` SP password |
 | `TELEPORT_DOMAIN` | `scripts/config.sh` | Teleport domain (defaults to teleport.davidshaevel.com) |
 
 Scripts will error with a clear message if a required env var is missing.

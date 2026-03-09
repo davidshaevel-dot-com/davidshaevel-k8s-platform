@@ -53,11 +53,13 @@ The existing Teleport app `davidshaevel-website` will be renamed to `davidshaeve
 
 ## Network Policies on GKE
 
-GKE uses Dataplane V2 (Cilium-based), so CiliumNetworkPolicy manifests work natively. Policies for the website namespace on GKE:
+GKE uses Dataplane V2 (Cilium-based internally), but does **not** expose `CiliumNetworkPolicy` CRDs (requires GKE Enterprise). Standard Kubernetes `NetworkPolicy` is used instead — GKE Dataplane V2 enforces these via its Cilium dataplane.
 
-- Default deny ingress (standard Kubernetes NetworkPolicy)
-- Allow intra-namespace (CiliumNetworkPolicy)
-- Allow from teleport-cluster to frontend on port 3000 (CiliumNetworkPolicy)
+Policies for the website namespace on GKE:
+
+- Default deny ingress (NetworkPolicy)
+- Allow intra-namespace (NetworkPolicy)
+- Allow from teleport-cluster to frontend on port 3000 (NetworkPolicy with `namespaceSelector`)
 
 No Prometheus scrape policy on GKE (monitoring stack only runs on AKS).
 

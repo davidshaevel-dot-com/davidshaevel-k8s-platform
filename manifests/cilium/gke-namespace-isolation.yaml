@@ -1,0 +1,50 @@
+# Network policies for GKE davidshaevel-website namespace.
+#
+# GKE Dataplane V2 uses Cilium internally but does not expose CiliumNetworkPolicy CRDs
+# (requires GKE Enterprise). Standard Kubernetes NetworkPolicy is used instead, which
+# GKE Dataplane V2 enforces via its Cilium dataplane.
+
+---
+# Default deny all ingress to davidshaevel-website namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: davidshaevel-website
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+
+---
+# Allow pods within the davidshaevel-website namespace to communicate.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-intra-namespace
+  namespace: davidshaevel-website
+spec:
+  podSelector: {}
+  ingress:
+    - from:
+        - podSelector: {}
+
+---
+# Allow ingress from teleport-cluster namespace to frontend on port 3000.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-teleport
+  namespace: davidshaevel-website
+spec:
+  podSelector:
+    matchLabels:
+      component: frontend
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: teleport-cluster
+      ports:
+        - port: 3000
+          protocol: TCP

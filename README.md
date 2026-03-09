@@ -303,11 +303,11 @@ Defined in `.envrc` (gitignored). See [.envrc.example](.envrc.example) for the t
 | Component | Running | Stopped |
 |-----------|---------|---------|
 | AKS control plane | Free | Free |
-| AKS Standard_B2ms node (1x) | ~$60 | $0 |
+| AKS Standard_B4ls_v2 node (1x) | ~$107 | $0 |
 | AKS Load Balancer (Teleport) | ~$18 | $0 |
 | AKS Managed Disks (PVs) | ~$1-5 | ~$1-5 |
-| GKE Standard (e2-medium, 1 node) | ~$25 | $0 (deleted) |
-| **Total** | **~$105-110** | **~$1-5** |
+| GKE Standard (e2-standard-2, 1 node) | ~$49 | $0 (deleted) |
+| **Total** | **~$180-185** | **~$1-5** |
 
 GKE has no stop/start — the **GKE Stop** workflow deletes the cluster entirely ($0), and **GKE Start** rebuilds it from scratch. AKS can be stopped and restarted without data loss (persistent volumes are retained). Managed disks are the only cost when both clusters are down.
 

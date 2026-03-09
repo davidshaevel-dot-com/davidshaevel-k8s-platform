@@ -25,5 +25,11 @@ export GCP_PROJECT="your-gcp-project-id"
 # Portainer admin password for REST API automation (gke-agent-register/deregister).
 export PORTAINER_ADMIN_PASSWORD="your-portainer-admin-password"
 
+# ACR service principal for GKE image pulls.
+# Dedicated 'gke-acr-pull' SP with AcrPull role scoped to k8sdevplatformacr.
+# Create with: az ad sp create-for-rbac --name gke-acr-pull --role AcrPull --scopes <acr-resource-id>
+export ACR_SP_APP_ID="your-sp-app-id"
+export ACR_SP_PASSWORD="your-sp-password"
+
 # Teleport domain for cluster access (defaults to teleport.davidshaevel.com in config.sh).
 export TELEPORT_DOMAIN="teleport.davidshaevel.com"

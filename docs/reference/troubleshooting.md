@@ -96,3 +96,53 @@ az aks nodepool delete \
 - Total time: ~5-10 minutes (node pool creation + drain + deletion).
 
 **First encountered:** 2026-03-08, when adding Prometheus PVC to a cluster that already had PVCs for Teleport, Portainer, Grafana, and PostgreSQL.
+
+---
+
+## GKE Pods Stuck in Pending: Insufficient CPU on e2-medium
+
+**Symptom:** After deploying davidshaevel-website to GKE via Argo CD, the frontend pod starts but the backend and database pods are stuck in `Pending`. `kubectl describe pod` shows:
+
+> 0/1 nodes are available: 1 Insufficient cpu. no new claims to deallocate, preemption: 0/1 nodes are available: 1 No preemption victims found for incoming pod.
+
+**Root cause:** GKE's e2-medium (2 shared vCPUs, 4 GiB RAM) has only ~940m allocatable CPU after system reservations (~1060m reserved for kubelet, kube-proxy, kube-dns, fluentbit, metrics agents, etc.). With Portainer agent, Teleport agent, system pods, and the frontend already scheduled, CPU requests totaled ~848m (90%), leaving only ~90m free — not enough for the backend (100m) and database (100m) pods.
+
+**Resource breakdown at time of issue:**
+
+| | Capacity | Allocatable | Requested | Free |
+|---|---|---|---|---|
+| CPU | 2000m | 940m | 848m | ~90m |
+| Memory | 3.8 GiB | 2.8 GiB | ~1.2 GiB | ~1.6 GiB |
+
+**Key insight:** GKE reserves over half the CPU on a 2 shared-core e2-medium for system components. The "2 vCPUs" is misleading — only ~940m is available for workloads.
+
+**Resolution:** Upgraded from `e2-medium` (2 shared vCPUs, 4 GiB, ~$25/month) to `e2-standard-2` (2 dedicated vCPUs, 8 GiB, ~$49/month). Dedicated cores provide ~1,800m allocatable CPU — nearly double — with plenty of headroom for all website pods plus agents.
+
+**Procedure:**
+1. Updated `GKE_MACHINE_TYPE` in `scripts/config.sh` from `e2-medium` to `e2-standard-2`
+2. Deleted the cluster: `./scripts/gke/stop.sh`
+3. Recreated with new type: `./scripts/gke/start.sh`
+
+Since GKE clusters are fully deleted on stop and recreated on start, there is no in-place resize — just change the config and rebuild.
+
+**First encountered:** 2026-03-09, when deploying davidshaevel-website to GKE for multi-cloud deployment (TT-263).
+
+---
+
+## GKE: CiliumNetworkPolicy CRD Not Available
+
+**Symptom:** Applying a `CiliumNetworkPolicy` manifest on GKE returns:
+
+> resource mapping not found for name: "allow-intra-namespace" namespace: "davidshaevel-website" from "...": no matches for kind "CiliumNetworkPolicy" in version "cilium.io/v2"
+
+**Root cause:** GKE Dataplane V2 uses Cilium internally for its dataplane, but does **not** expose the `CiliumNetworkPolicy` CRD. The CRD is only available with GKE Enterprise (paid tier). Standard GKE clusters only support Kubernetes-native `NetworkPolicy` resources.
+
+**Resolution:** Use standard Kubernetes `NetworkPolicy` instead of `CiliumNetworkPolicy` on GKE. GKE Dataplane V2 enforces standard NetworkPolicy via its Cilium dataplane, so the security posture is equivalent.
+
+**Key difference from AKS:** AKS with Azure CNI Overlay + Cilium (ACNS) exposes full `CiliumNetworkPolicy` CRDs. The same security intent requires different manifest formats:
+- **AKS:** `CiliumNetworkPolicy` with `endpointSelector` and `fromEndpoints` using `k8s:io.kubernetes.pod.namespace`
+- **GKE:** Standard `NetworkPolicy` with `podSelector` and `namespaceSelector` using `kubernetes.io/metadata.name`
+
+See `manifests/cilium/namespace-isolation.yaml` (AKS) vs `manifests/cilium/gke-namespace-isolation.yaml` (GKE).
+
+**First encountered:** 2026-03-09, during GKE multi-cloud deployment (TT-263).
