@@ -5,7 +5,7 @@ metadata:
   namespace: argocd
 spec:
   description: Platform components managed by Argo CD
-  # Allow deploying to these namespaces on the local cluster.
+  # Allow deploying to these namespaces on the local (AKS) and remote (GKE) clusters.
   destinations:
     - namespace: portainer
       server: https://kubernetes.default.svc
@@ -13,6 +13,8 @@ spec:
       server: https://kubernetes.default.svc
     - namespace: davidshaevel-website
       server: https://kubernetes.default.svc
+    - namespace: davidshaevel-website
+      name: k8s-developer-platform-gke
   sourceRepos:
     - https://github.com/davidshaevel-dot-com/davidshaevel-k8s-platform
     - https://portainer.github.io/k8s/
