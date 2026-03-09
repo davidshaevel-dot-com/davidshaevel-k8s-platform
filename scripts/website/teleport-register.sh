@@ -27,7 +27,7 @@ echo "Teleport agent version: ${TELEPORT_VERSION}"
 
 echo ""
 echo "Upgrading teleport-agent to register website app..."
-echo "  Apps: portainer + argocd + davidshaevel-website"
+echo "  Apps: portainer + argocd + davidshaevel-website-aks"
 echo "  Website URI: http://frontend.${WEBSITE_NAMESPACE}.svc.cluster.local:3000"
 echo ""
 
@@ -40,7 +40,7 @@ helm upgrade teleport-agent teleport/teleport-kube-agent \
     --set "apps[0].insecure_skip_verify=true" \
     --set "apps[1].name=argocd" \
     --set "apps[1].uri=http://argocd-server.argocd.svc.cluster.local" \
-    --set "apps[2].name=davidshaevel-website" \
+    --set "apps[2].name=davidshaevel-website-aks" \
     --set "apps[2].uri=http://frontend.${WEBSITE_NAMESPACE}.svc.cluster.local:3000" \
     --version="${TELEPORT_VERSION}" \
     --wait
@@ -57,5 +57,5 @@ echo "=== Registered Apps ==="
 kubectl exec -n "${TELEPORT_NAMESPACE}" deployment/teleport-cluster-auth -- tctl apps ls
 
 echo ""
-echo "davidshaevel-website is now accessible via Teleport:"
-echo "  https://${TELEPORT_DOMAIN} -> davidshaevel-website app"
+echo "davidshaevel-website-aks is now accessible via Teleport:"
+echo "  https://${TELEPORT_DOMAIN} -> davidshaevel-website-aks app"

@@ -27,7 +27,7 @@ echo "Teleport agent version: ${TELEPORT_VERSION}"
 
 echo ""
 echo "Upgrading teleport-agent to register Grafana app..."
-echo "  Apps: portainer + argocd + davidshaevel-website + grafana"
+echo "  Apps: portainer + argocd + davidshaevel-website-aks + grafana"
 echo "  Grafana URI: http://kube-prometheus-stack-grafana.${MONITORING_NAMESPACE}.svc.cluster.local"
 echo ""
 
@@ -40,7 +40,7 @@ helm upgrade teleport-agent teleport/teleport-kube-agent \
     --set "apps[0].insecure_skip_verify=true" \
     --set "apps[1].name=argocd" \
     --set "apps[1].uri=http://argocd-server.argocd.svc.cluster.local" \
-    --set "apps[2].name=davidshaevel-website" \
+    --set "apps[2].name=davidshaevel-website-aks" \
     --set "apps[2].uri=http://frontend.davidshaevel-website.svc.cluster.local:3000" \
     --set "apps[3].name=grafana" \
     --set "apps[3].uri=http://kube-prometheus-stack-grafana.${MONITORING_NAMESPACE}.svc.cluster.local" \

@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: davidshaevel-website
+  name: davidshaevel-website-aks
   namespace: argocd
 spec:
   project: platform
