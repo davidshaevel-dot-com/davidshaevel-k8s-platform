@@ -8,9 +8,14 @@
 
 **Tech Stack:** Kubernetes, Argo CD, Helm, Teleport, Cilium, ACR, GKE
 
+**Key Design Decisions:**
+- **Cluster name references:** AppProject and Application manifests reference GKE by `name: k8s-developer-platform-gke` instead of the API server IP. This means committed YAML never changes when GKE is deleted and recreated with a new IP.
+- **`argocd --core` mode:** The GKE start script uses `argocd cluster add --core` to register GKE without needing the Argo CD admin password. This talks directly to the Kubernetes API via kubeconfig.
+- **GKE restart automation:** `gke/start.sh` is extended with steps 5-8 to handle Argo CD registration, ACR pull secret, network policies, and Teleport website registration — making `./scripts/gke/start.sh` a single command that fully rebuilds the GKE environment.
+
 ---
 
-## Task 1: Start Both Clusters
+## Task 1: Start Both Clusters ✅
 
 **Step 1: Start AKS cluster**
 
@@ -67,7 +72,7 @@ az aks get-credentials --resource-group k8s-developer-platform-rg --name k8s-dev
 
 ---
 
-## Task 2: Rename AKS Website in Argo CD and Teleport
+## Task 2: Rename AKS Website in Argo CD and Teleport ✅
 
 **Files:**
 - Rename: `argocd/applications/davidshaevel-website.yaml` -> `argocd/applications/davidshaevel-website-aks.yaml`
@@ -178,7 +183,9 @@ related-issues: TT-263"
 
 ---
 
-## Task 3: Register GKE as Argo CD Remote Cluster
+## Task 3: Register GKE as Argo CD Remote Cluster ✅ (partially — cluster added, AppProject updated)
+
+Uses `argocd --core` mode to avoid needing the admin password or port-forwarding.
 
 **Step 1: Install argocd CLI (if not installed)**
 
@@ -186,33 +193,13 @@ related-issues: TT-263"
 brew install argocd
 ```
 
-**Step 2: Get the Argo CD admin password**
+Or download from GitHub releases.
+
+**Step 2: Add GKE cluster to Argo CD**
 
 ```bash
-kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
-```
-
-If the initial secret was deleted (it was), use the password saved in 1Password.
-
-**Step 3: Port-forward Argo CD and log in**
-
-```bash
-kubectl port-forward svc/argocd-server -n argocd 8080:80 &
-argocd login localhost:8080 --username admin --password <password> --insecure
-```
-
-**Step 4: Get GKE context name**
-
-```bash
-kubectl config get-contexts
-```
-
-The GKE context is typically named `gke_dev-david-024680_us-central1-a_k8s-developer-platform-gke`.
-
-**Step 5: Add GKE cluster to Argo CD**
-
-```bash
-argocd cluster add <gke-context-name> --name k8s-developer-platform-gke
+argocd cluster add gke_dev-david-024680_us-central1-a_k8s-developer-platform-gke \
+    --name k8s-developer-platform-gke --core -y
 ```
 
 This creates a ServiceAccount and ClusterRoleBinding on GKE, and stores the credentials as a Secret in the `argocd` namespace on AKS.
@@ -220,20 +207,14 @@ This creates a ServiceAccount and ClusterRoleBinding on GKE, and stores the cred
 Verify:
 
 ```bash
-argocd cluster list
+argocd cluster list --core
 ```
 
-Expected: Two clusters — `https://kubernetes.default.svc` (AKS, in-cluster) and the GKE API server URL.
+Expected: Two clusters — `https://kubernetes.default.svc` (AKS, in-cluster) and the GKE API server URL with name `k8s-developer-platform-gke`.
 
-**Step 6: Kill port-forward**
+**Step 3: Update AppProject to allow GKE destinations (by name, not IP)**
 
-```bash
-kill %1
-```
-
-**Step 7: Update AppProject to allow GKE destinations**
-
-In `argocd/projects/platform.yaml`, add the GKE cluster's server URL to destinations:
+In `argocd/projects/platform.yaml`, add GKE destination using cluster name:
 
 ```yaml
 destinations:
@@ -244,10 +225,8 @@ destinations:
   - namespace: davidshaevel-website
     server: https://kubernetes.default.svc
   - namespace: davidshaevel-website
-    server: <gke-api-server-url>
+    name: k8s-developer-platform-gke
 ```
-
-Get the GKE API server URL from `argocd cluster list` output.
 
 Apply:
 
@@ -255,13 +234,14 @@ Apply:
 kubectl apply -f argocd/projects/platform.yaml
 ```
 
-**Step 8: Commit**
+**Step 4: Commit**
 
 ```bash
 git add argocd/projects/platform.yaml
 git commit -m "feat(argocd): add GKE cluster to platform project destinations
 
 Allow Argo CD to deploy to the davidshaevel-website namespace on GKE.
+Uses cluster name reference so YAML is stable across GKE recreates.
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 
@@ -271,6 +251,9 @@ related-issues: TT-263"
 ---
 
 ## Task 4: Set Up ACR Image Pull Secret on GKE
+
+**Files:**
+- Create: `scripts/gke/acr-pull-secret.sh`
 
 **Step 1: Create an ACR service principal (or reuse existing)**
 
@@ -286,50 +269,33 @@ If reusing, get the app ID. If creating a new one:
 az ad sp create-for-rbac --name acr-pull-gke --role AcrPull --scopes /subscriptions/<sub-id>/resourceGroups/k8s-developer-platform-rg/providers/Microsoft.ContainerRegistry/registries/k8sdevplatformacr
 ```
 
-**Step 2: Switch to GKE context**
+**Step 2: Create `scripts/gke/acr-pull-secret.sh`**
+
+This script will be called by `gke/start.sh` on every GKE rebuild. It:
+- Switches to GKE context
+- Creates the `davidshaevel-website` namespace (idempotent)
+- Creates the `acr-pull-secret` docker-registry secret
+- Patches the default service account with `imagePullSecrets`
+- Switches back to AKS context
+
+Requires env vars: `ACR_SP_APP_ID` and `ACR_SP_PASSWORD` in `.envrc`.
+
+**Step 3: Run the script**
 
 ```bash
-gcloud container clusters get-credentials k8s-developer-platform-gke --zone us-central1-a --project "${GCP_PROJECT}"
-```
-
-**Step 3: Create the namespace on GKE**
-
-```bash
-kubectl create namespace davidshaevel-website --dry-run=client -o yaml | kubectl apply -f -
-```
-
-**Step 4: Create the image pull secret**
-
-```bash
-kubectl create secret docker-registry acr-pull-secret \
-  --docker-server=k8sdevplatformacr.azurecr.io \
-  --docker-username=<sp-app-id> \
-  --docker-password=<sp-password> \
-  -n davidshaevel-website
-```
-
-**Step 5: Patch the default service account**
-
-```bash
-kubectl patch serviceaccount default -n davidshaevel-website \
-  -p '{"imagePullSecrets": [{"name": "acr-pull-secret"}]}'
+./scripts/gke/acr-pull-secret.sh
 ```
 
 Verify:
 
 ```bash
+# On GKE
 kubectl get serviceaccount default -n davidshaevel-website -o yaml
 ```
 
 Expected: `imagePullSecrets` includes `acr-pull-secret`.
 
-**Step 6: Switch back to AKS context**
-
-```bash
-az aks get-credentials --resource-group k8s-developer-platform-rg --name k8s-developer-platform-aks --overwrite-existing
-```
-
-No commit needed — this is infrastructure config with credentials, not in Git.
+No commit of secrets — this is infrastructure config. The script itself is committed.
 
 ---
 
@@ -339,6 +305,8 @@ No commit needed — this is infrastructure config with credentials, not in Git.
 - Create: `argocd/applications/davidshaevel-website-gke.yaml`
 
 **Step 1: Create the GKE Application manifest**
+
+Uses cluster name (not IP) so the manifest is stable across GKE recreates:
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
@@ -353,7 +321,7 @@ spec:
     targetRevision: main
     path: manifests/davidshaevel-website
   destination:
-    server: <gke-api-server-url>
+    name: k8s-developer-platform-gke
     namespace: davidshaevel-website
   syncPolicy:
     automated:
@@ -362,8 +330,6 @@ spec:
     syncOptions:
       - CreateNamespace=true
 ```
-
-Use the GKE API server URL from `argocd cluster list`.
 
 **Step 2: Apply and verify**
 
@@ -396,7 +362,7 @@ git add argocd/applications/davidshaevel-website-gke.yaml
 git commit -m "feat(website): add Argo CD application for GKE multi-cloud deployment
 
 Same manifests deployed to both AKS and GKE via single Argo CD instance.
-GKE pulls images from ACR using image pull secret.
+Uses cluster name reference so manifest is stable across GKE recreates.
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 
@@ -409,7 +375,6 @@ related-issues: TT-263"
 
 **Files:**
 - Create: `manifests/cilium/gke-namespace-isolation.yaml`
-- Modify: `scripts/cilium/apply-policies.sh` (or create a separate GKE apply script)
 
 **Step 1: Create GKE network policies manifest**
 
@@ -622,7 +587,226 @@ related-issues: TT-263"
 
 ---
 
-## Task 8: Update Documentation and Push
+## Task 8: Extend gke/start.sh with Platform Setup
+
+**Files:**
+- Create: `scripts/gke/argocd-cluster-add.sh`
+- Create: `scripts/gke/acr-pull-secret.sh`
+- Create: `scripts/gke/apply-network-policies.sh`
+- Modify: `scripts/gke/start.sh` (add steps 5-8)
+
+**Step 1: Create `scripts/gke/argocd-cluster-add.sh`**
+
+Registers GKE in Argo CD using `--core` mode (no password needed):
+
+```bash
+#!/usr/bin/env bash
+# Register GKE cluster in Argo CD using --core mode.
+# Requires: argocd CLI, kubectl context for both AKS (current) and GKE.
+
+source "$(dirname "$0")/../config.sh"
+setup_logging "gke-argocd-cluster-add"
+
+GKE_CONTEXT="gke_${GCP_PROJECT}_${GKE_ZONE}_${GKE_CLUSTER_NAME}"
+
+echo "Removing stale GKE cluster from Argo CD (if exists)..."
+argocd cluster rm k8s-developer-platform-gke --core 2>/dev/null || true
+
+echo "Adding GKE cluster to Argo CD..."
+echo "  Context: ${GKE_CONTEXT}"
+echo "  Name:    k8s-developer-platform-gke"
+echo ""
+
+argocd cluster add "${GKE_CONTEXT}" \
+    --name k8s-developer-platform-gke \
+    --core -y
+
+echo ""
+echo "Argo CD clusters:"
+argocd cluster list --core
+```
+
+**Step 2: Create `scripts/gke/acr-pull-secret.sh`**
+
+Creates ACR image pull secret and patches the default service account on GKE:
+
+```bash
+#!/usr/bin/env bash
+# Set up ACR image pull secret on GKE so pods can pull from Azure Container Registry.
+# Requires: ACR_SP_APP_ID and ACR_SP_PASSWORD in .envrc.
+
+source "$(dirname "$0")/../config.sh"
+setup_logging "gke-acr-pull-secret"
+
+WEBSITE_NAMESPACE="davidshaevel-website"
+ACR_SP_APP_ID="${ACR_SP_APP_ID:?Set ACR_SP_APP_ID in .envrc}"
+ACR_SP_PASSWORD="${ACR_SP_PASSWORD:?Set ACR_SP_PASSWORD in .envrc}"
+
+# Switch to GKE context.
+echo "Switching to GKE context..."
+gcloud container clusters get-credentials "${GKE_CLUSTER_NAME}" \
+    --project="${GCP_PROJECT}" \
+    --zone="${GKE_ZONE}"
+
+# Create namespace (idempotent).
+kubectl create namespace "${WEBSITE_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+
+# Create or replace the pull secret.
+echo "Creating ACR pull secret in ${WEBSITE_NAMESPACE}..."
+kubectl create secret docker-registry acr-pull-secret \
+    --docker-server="${ACR_LOGIN_SERVER}" \
+    --docker-username="${ACR_SP_APP_ID}" \
+    --docker-password="${ACR_SP_PASSWORD}" \
+    -n "${WEBSITE_NAMESPACE}" \
+    --dry-run=client -o yaml | kubectl apply -f -
+
+# Patch the default service account.
+echo "Patching default service account..."
+kubectl patch serviceaccount default -n "${WEBSITE_NAMESPACE}" \
+    -p '{"imagePullSecrets": [{"name": "acr-pull-secret"}]}'
+
+echo ""
+echo "ACR pull secret configured on GKE."
+kubectl get serviceaccount default -n "${WEBSITE_NAMESPACE}" -o jsonpath='{.imagePullSecrets}'; echo
+
+# Switch back to AKS context.
+echo ""
+echo "Switching back to AKS context..."
+az aks get-credentials \
+    --subscription "${SUBSCRIPTION}" \
+    --resource-group "${RESOURCE_GROUP}" \
+    --name "${AKS_CLUSTER_NAME}" \
+    --overwrite-existing
+```
+
+**Step 3: Create `scripts/gke/apply-network-policies.sh`**
+
+```bash
+#!/usr/bin/env bash
+# Apply Cilium network policies on GKE for the davidshaevel-website namespace.
+
+source "$(dirname "$0")/../config.sh"
+setup_logging "gke-apply-network-policies"
+
+# Switch to GKE context.
+echo "Switching to GKE context..."
+gcloud container clusters get-credentials "${GKE_CLUSTER_NAME}" \
+    --project="${GCP_PROJECT}" \
+    --zone="${GKE_ZONE}"
+
+echo "Applying GKE network policies..."
+kubectl apply -f manifests/cilium/gke-namespace-isolation.yaml
+
+echo ""
+echo "Network policies:"
+kubectl get networkpolicies -n davidshaevel-website
+kubectl get ciliumnetworkpolicies -n davidshaevel-website
+
+# Switch back to AKS context.
+echo ""
+echo "Switching back to AKS context..."
+az aks get-credentials \
+    --subscription "${SUBSCRIPTION}" \
+    --resource-group "${RESOURCE_GROUP}" \
+    --name "${AKS_CLUSTER_NAME}" \
+    --overwrite-existing
+```
+
+**Step 4: Update `scripts/gke/start.sh`**
+
+Add steps 5-8 after the existing step 4:
+
+```bash
+#!/usr/bin/env bash
+# Orchestrated rebuild of the GKE environment.
+# Creates cluster, installs agents, registers in Argo CD, sets up ACR access,
+# applies network policies, and registers website in Teleport.
+
+source "$(dirname "$0")/../config.sh"
+setup_logging "gke-start"
+
+SCRIPT_DIR="$(dirname "$0")"
+
+echo "=========================================="
+echo "  GKE Environment Rebuild"
+echo "=========================================="
+echo ""
+
+# Step 1: Create cluster.
+echo "--- Step 1/8: Create GKE cluster ---"
+"${SCRIPT_DIR}/create.sh"
+
+echo ""
+echo "--- Step 2/8: Install Portainer Agent ---"
+"${SCRIPT_DIR}/../portainer/gke-agent-install.sh"
+
+echo ""
+echo "--- Step 3/8: Register in Portainer ---"
+"${SCRIPT_DIR}/../portainer/gke-agent-register.sh"
+
+echo ""
+echo "--- Step 4/8: Install Teleport Agent ---"
+"${SCRIPT_DIR}/../teleport/gke-agent-install.sh"
+
+echo ""
+echo "--- Step 5/8: Register GKE in Argo CD ---"
+"${SCRIPT_DIR}/argocd-cluster-add.sh"
+
+echo ""
+echo "--- Step 6/8: Set up ACR pull secret ---"
+"${SCRIPT_DIR}/acr-pull-secret.sh"
+
+echo ""
+echo "--- Step 7/8: Apply network policies ---"
+"${SCRIPT_DIR}/apply-network-policies.sh"
+
+echo ""
+echo "--- Step 8/8: Register website in Teleport ---"
+"${SCRIPT_DIR}/../website/gke-teleport-register.sh"
+
+echo ""
+echo "=========================================="
+echo "  GKE Environment Ready"
+echo "=========================================="
+echo ""
+echo "Verify:"
+echo "  1. GKE appears in Portainer UI as 'GKE'"
+echo "  2. 'k8s-developer-platform-gke' in Teleport: tctl kube ls"
+echo "  3. davidshaevel-website-gke Synced/Healthy in Argo CD"
+echo "  4. https://davidshaevel-website-gke.teleport.davidshaevel.com loads"
+```
+
+**Step 5: Make all new scripts executable**
+
+```bash
+chmod +x scripts/gke/argocd-cluster-add.sh scripts/gke/acr-pull-secret.sh scripts/gke/apply-network-policies.sh
+```
+
+**Step 6: Add env vars to `.envrc.example`**
+
+Add `ACR_SP_APP_ID` and `ACR_SP_PASSWORD` placeholders.
+
+**Step 7: Commit**
+
+```bash
+git add scripts/gke/argocd-cluster-add.sh scripts/gke/acr-pull-secret.sh \
+    scripts/gke/apply-network-policies.sh scripts/gke/start.sh .envrc.example
+git commit -m "feat(gke): automate full GKE environment rebuild in start.sh
+
+Extends gke/start.sh to 8 steps: create cluster, install Portainer agent,
+register in Portainer, install Teleport agent, register in Argo CD (--core),
+set up ACR pull secret, apply network policies, register website in Teleport.
+
+Single command rebuilds the complete GKE environment after delete/recreate.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+related-issues: TT-263"
+```
+
+---
+
+## Task 9: Update Documentation and Push
 
 **Files:**
 - Modify: `CLAUDE.md` (architecture diagram, helpful commands)
@@ -676,7 +860,7 @@ git push
 
 ---
 
-## Task 9: Verify End-to-End and Update Linear
+## Task 10: Verify End-to-End and Update Linear
 
 **Step 1: Verify both sites in Argo CD UI**
 
