@@ -40,7 +40,7 @@ AKS Cluster (k8s-developer-platform-rg, eastus)
     |       |
     |       +-- Teleport Proxy (HTTPS, LoadBalancer)
     |       |       Web UI:   https://<TELEPORT_DOMAIN>
-    |       |       App Proxy: routes to Portainer (ClusterIP)
+    |       |       App Proxy: routes to Portainer, Argo CD, Grafana, Website
     |       |       K8s Proxy: authenticated kubectl access
     |       |
     |       +-- Teleport Auth (ClusterIP)
@@ -58,12 +58,25 @@ AKS Cluster (k8s-developer-platform-rg, eastus)
     |           (no public IP, accessed via Teleport)
     |           GitOps: syncs platform components from Git
     |
+    +-- monitoring namespace
+    |       |
+    |       +-- Prometheus (metrics collection, 7d retention, 5Gi PVC)
+    |       +-- Grafana (visualization, ClusterIP, accessed via Teleport)
+    |       +-- Node Exporter (node-level metrics)
+    |       +-- Kube State Metrics (K8s object metrics)
+    |
+    +-- davidshaevel-website namespace
+    |       |
+    |       +-- Frontend (Next.js, port 3000)
+    |       +-- Backend (NestJS, port 3001)
+    |       +-- Database (PostgreSQL 15, 1Gi PVC)
+    |
     +-- kube-system namespace (Azure-managed)
     |       +-- Cilium (eBPF CNI, Azure CNI Overlay)
     |       +-- Hubble Relay (network flow observability, via ACNS)
     |       +-- Hubble UI (network flow visualization)
     |
-    +-- (future namespaces: Crossplane, monitoring)
+    +-- (future namespaces: Crossplane)
 
 GKE Cluster (us-central1-a)
     |
@@ -90,7 +103,7 @@ All traffic flows through Teleport. Portainer has no public endpoint. The GKE Po
 | 3 | Introduction to Crossplane | Not started |
 | 4 | Crossplane in Action | Not started |
 | 5 | Hands-on Introduction to Waypoint | Not started |
-| 6 | Monitoring with Prometheus & Robusta | Not started |
+| 6 | Monitoring with Prometheus & Robusta | kube-prometheus-stack installed (adapted) |
 
 ---
 
@@ -141,6 +154,21 @@ helm status portainer -n portainer
 helm status teleport-cluster -n teleport-cluster
 helm status teleport-agent -n teleport-cluster
 helm status argocd -n argocd
+helm status kube-prometheus-stack -n monitoring
+helm history kube-prometheus-stack -n monitoring  # View Helm revision history
+
+# Monitoring (kube-prometheus-stack)
+kubectl get pods -n monitoring                    # Check monitoring pods
+kubectl get pvc -n monitoring                     # Check persistent volumes
+./scripts/monitoring/status.sh                    # Full monitoring stack status
+# Grafana: https://grafana.teleport.davidshaevel.com (admin / <1Password>)
+# Dashboards: Kubernetes Compute Resources, Node Exporter, Networking
+
+# davidshaevel-website
+kubectl get pods -n davidshaevel-website          # Check website pods
+kubectl logs -n davidshaevel-website -l component=frontend    # Frontend logs
+kubectl logs -n davidshaevel-website -l component=backend     # Backend logs
+kubectl exec -it deploy/database -n davidshaevel-website -- psql -U postgres -d davidshaevel  # DB shell
 
 # Argo CD
 kubectl get applications -n argocd         # List Argo CD applications
