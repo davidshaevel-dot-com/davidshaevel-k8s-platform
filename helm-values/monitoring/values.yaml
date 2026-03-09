@@ -19,6 +19,7 @@ grafana:
     security:
       cookie_secure: true
       cookie_samesite: none
+      csrf_trusted_origins: grafana.teleport.davidshaevel.com
 
 # Prometheus — keep defaults, adjust retention for dev cluster.
 prometheus:

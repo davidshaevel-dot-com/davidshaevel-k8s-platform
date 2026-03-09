@@ -10,7 +10,7 @@
 #     implicit default-deny for all other egress, which breaks outbound traffic)
 #   - No policies on kube-system (Azure-managed: Cilium, CoreDNS, etc.)
 #
-# Namespaces covered: portainer, teleport-cluster
+# Namespaces covered: portainer, teleport-cluster, davidshaevel-website, monitoring
 #
 # Default deny uses standard Kubernetes NetworkPolicy (podSelector: {},
 # policyTypes: [Ingress]) which Cilium enforces natively. Allow rules use
@@ -172,4 +172,75 @@ spec:
       toPorts:
         - ports:
             - port: "3000"
+              protocol: TCP
+
+---
+# =============================================================================
+# MONITORING NAMESPACE
+# =============================================================================
+
+# Default deny all ingress to monitoring namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: monitoring
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+
+---
+# Allow pods within the monitoring namespace to communicate.
+# Prometheus scrapes node-exporter, kube-state-metrics, and Grafana within
+# the namespace. Grafana queries Prometheus as its data source.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-intra-namespace
+  namespace: monitoring
+spec:
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - {}
+
+---
+# Allow ingress from teleport-cluster namespace to Grafana on port 3000.
+# The Teleport agent proxies user traffic to Grafana's ClusterIP service.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-from-teleport
+  namespace: monitoring
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: grafana
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: teleport-cluster
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+
+---
+# Allow Prometheus to scrape pods in the davidshaevel-website namespace.
+# Prometheus needs to reach backend metrics endpoint on port 3001.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-prometheus-scrape
+  namespace: davidshaevel-website
+spec:
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+      toPorts:
+        - ports:
+            - port: "3001"
               protocol: TCP
