@@ -76,7 +76,7 @@ jobs:
 
           echo ""
           echo "=== GKE Pods ==="
-          gcloud container clusters get-credentials portainer-gke \
+          gcloud container clusters get-credentials k8s-developer-platform-gke \
             --zone us-central1-a \
             --project "${GCP_PROJECT}"
           kubectl get pods --all-namespaces
@@ -86,15 +86,15 @@ jobs:
         run: |
           echo "## GKE Start Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **GKE Cluster:** portainer-gke" >> $GITHUB_STEP_SUMMARY
+          echo "- **GKE Cluster:** k8s-developer-platform-gke" >> $GITHUB_STEP_SUMMARY
           echo "- **Portainer Agent:** Installed and registered" >> $GITHUB_STEP_SUMMARY
-          echo "- **Teleport Agent:** Installed (portainer-gke)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Teleport Agent:** Installed (k8s-developer-platform-gke)" >> $GITHUB_STEP_SUMMARY
 
       - name: Cleanup on Failure
         if: failure()
         run: |
           echo "Workflow failed. Deleting GKE cluster to avoid costs..."
-          gcloud container clusters delete portainer-gke \
+          gcloud container clusters delete k8s-developer-platform-gke \
             --project="${GCP_PROJECT}" \
             --zone=us-central1-a \
             --quiet || echo "Cleanup failed or cluster does not exist."

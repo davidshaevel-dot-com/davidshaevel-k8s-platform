@@ -1072,7 +1072,7 @@ Check that Portainer shows the GKE environment and it's reachable.
 
 ```bash
 # Get GKE credentials
-gcloud container clusters get-credentials portainer-gke --zone us-central1-a --project $(grep GCP_PROJECT .envrc | cut -d= -f2 | tr -d '"')
+gcloud container clusters get-credentials k8s-developer-platform-gke --zone us-central1-a --project $(grep GCP_PROJECT .envrc | cut -d= -f2 | tr -d '"')
 
 # Use argocd CLI to add the cluster (requires argocd CLI installed)
 # Or create a Secret manually — this step may need research

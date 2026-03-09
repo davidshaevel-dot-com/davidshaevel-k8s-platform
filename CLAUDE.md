@@ -120,7 +120,7 @@ az aks get-credentials --resource-group k8s-developer-platform-rg --name k8s-dev
 az aks list --resource-group k8s-developer-platform-rg --output table
 
 # GKE
-gcloud container clusters get-credentials portainer-gke --zone us-central1-a --project <project-id>
+gcloud container clusters get-credentials k8s-developer-platform-gke --zone us-central1-a --project <project-id>
 gcloud container clusters list --project <project-id>
 
 # Kubernetes
@@ -180,7 +180,7 @@ kubectl get svc -n argocd                  # Check Argo CD services
 tsh login --proxy=<TELEPORT_DOMAIN> --user=admin
 tsh kube ls                       # List available kube clusters
 tsh kube login k8s-developer-platform-aks  # Switch kubectl to AKS via Teleport
-tsh kube login portainer-gke      # Switch kubectl to GKE via Teleport
+tsh kube login k8s-developer-platform-gke      # Switch kubectl to GKE via Teleport
 tsh logout
 
 # Teleport admin (via auth pod) - requires direct AKS context, not Teleport

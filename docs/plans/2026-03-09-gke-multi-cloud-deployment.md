@@ -52,7 +52,7 @@ This runs `create.sh` + Portainer agent install + Teleport agent install. Takes 
 
 ```bash
 # Switch to GKE context
-gcloud container clusters get-credentials portainer-gke --zone us-central1-a --project "${GCP_PROJECT}"
+gcloud container clusters get-credentials k8s-developer-platform-gke --zone us-central1-a --project "${GCP_PROJECT}"
 kubectl get nodes
 kubectl get pods -n teleport-cluster
 ```
@@ -207,12 +207,12 @@ argocd login localhost:8080 --username admin --password <password> --insecure
 kubectl config get-contexts
 ```
 
-The GKE context is typically named `gke_dev-david-024680_us-central1-a_portainer-gke`.
+The GKE context is typically named `gke_dev-david-024680_us-central1-a_k8s-developer-platform-gke`.
 
 **Step 5: Add GKE cluster to Argo CD**
 
 ```bash
-argocd cluster add <gke-context-name> --name portainer-gke
+argocd cluster add <gke-context-name> --name k8s-developer-platform-gke
 ```
 
 This creates a ServiceAccount and ClusterRoleBinding on GKE, and stores the credentials as a Secret in the `argocd` namespace on AKS.
@@ -289,7 +289,7 @@ az ad sp create-for-rbac --name acr-pull-gke --role AcrPull --scopes /subscripti
 **Step 2: Switch to GKE context**
 
 ```bash
-gcloud container clusters get-credentials portainer-gke --zone us-central1-a --project "${GCP_PROJECT}"
+gcloud container clusters get-credentials k8s-developer-platform-gke --zone us-central1-a --project "${GCP_PROJECT}"
 ```
 
 **Step 3: Create the namespace on GKE**
@@ -377,7 +377,7 @@ Expected: `davidshaevel-website-gke` appears. Wait for sync.
 **Step 3: Check pods on GKE**
 
 ```bash
-gcloud container clusters get-credentials portainer-gke --zone us-central1-a --project "${GCP_PROJECT}"
+gcloud container clusters get-credentials k8s-developer-platform-gke --zone us-central1-a --project "${GCP_PROJECT}"
 kubectl get pods -n davidshaevel-website
 ```
 
@@ -470,7 +470,7 @@ spec:
 **Step 2: Apply on GKE**
 
 ```bash
-gcloud container clusters get-credentials portainer-gke --zone us-central1-a --project "${GCP_PROJECT}"
+gcloud container clusters get-credentials k8s-developer-platform-gke --zone us-central1-a --project "${GCP_PROJECT}"
 kubectl apply -f manifests/cilium/gke-namespace-isolation.yaml
 ```
 

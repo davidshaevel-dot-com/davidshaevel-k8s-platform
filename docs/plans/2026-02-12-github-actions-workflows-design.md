@@ -158,7 +158,7 @@ Add `PORTAINER_ADMIN_PASSWORD` to the template.
 11. `./scripts/teleport/gke-agent-install.sh` (creates token on AKS, installs on GKE)
 12. Verify: check Teleport registrations, GKE pods
 13. Output summary
-14. **On failure:** `gcloud container clusters delete portainer-gke --quiet` (cost protection)
+14. **On failure:** `gcloud container clusters delete k8s-developer-platform-gke --quiet` (cost protection)
 
 ### 3d. `.github/workflows/gke-stop.yml`
 
@@ -270,7 +270,7 @@ The `projects/page.tsx` currently hardcodes the davidshaevel.com platform projec
 ## Verification
 
 1. **AKS Start workflow:** Trigger manually → cluster starts → DNS updates → Teleport accessible at https://teleport.davidshaevel.com
-2. **GKE Start workflow:** Trigger manually → cluster created → Portainer Agent installed → GKE appears in Portainer UI → Teleport shows portainer-gke in `tctl kube ls`
+2. **GKE Start workflow:** Trigger manually → cluster created → Portainer Agent installed → GKE appears in Portainer UI → Teleport shows k8s-developer-platform-gke in `tctl kube ls`
 3. **GKE Stop workflow:** Trigger manually → GKE removed from Portainer → cluster deleted → $0 cost
 4. **AKS Stop workflow:** Trigger manually → DNS records deleted → cluster stopped → ~$48/month saved
 5. **Failure safety:** Intentionally fail GKE Start mid-way → verify cleanup step deletes the cluster

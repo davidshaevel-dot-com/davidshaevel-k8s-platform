@@ -68,6 +68,6 @@ jobs:
         run: |
           echo "## GKE Stop Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Cluster:** portainer-gke (deleted)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cluster:** k8s-developer-platform-gke (deleted)" >> $GITHUB_STEP_SUMMARY
           echo "- **Portainer deregistered:** ${{ github.event.inputs.deregister_portainer }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Cost:** \$0" >> $GITHUB_STEP_SUMMARY

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Deploy teleport-kube-agent on the GKE cluster to register it with Teleport.
-# Registers the GKE cluster as "portainer-gke" in Teleport for kubectl access.
+# Registers the GKE cluster as "k8s-developer-platform-gke" in Teleport for kubectl access.
 
 source "$(dirname "$0")/../config.sh"
 setup_logging "teleport-gke-agent-install"
 
 TELEPORT_NAMESPACE="teleport-cluster"
-GKE_KUBE_NAME="portainer-gke"
+GKE_KUBE_NAME="k8s-developer-platform-gke"
 
 # Switch to AKS context to create the join token.
 echo "Switching to AKS context to create join token..."

@@ -17,7 +17,7 @@ AKS Cluster (portainer-rg, eastus)              GKE Cluster (dev-david, us-centr
     |       (server connects to agent)         |      |       (firewall: AKS egress IP only)
     |                                          |      |
     +-- Teleport Proxy (LB :443)               |      +-- Teleport Kube Agent
-    |       teleport.davidshaevel.com          |      |       (registers as "portainer-gke")
+    |       teleport.davidshaevel.com          |      |       (registers as "k8s-developer-platform-gke")
     |                                          |      |
     +-- Teleport Agent (app + kube)            |      +-- (future: app, monitoring namespaces)
                                                |
@@ -32,7 +32,7 @@ AKS Cluster (portainer-rg, eastus)              GKE Cluster (dev-david, us-centr
 | GCP project | `dev-david-024680` | Personal dev project, already default |
 | Agent type | Standard Agent | Simplest setup; GKE agent has LoadBalancer, AKS Portainer server connects outbound |
 | Agent security | GCP firewall rule | Port 9001 restricted to AKS cluster egress IP only |
-| Teleport for GKE | Yes | Registers as `portainer-gke` for kubectl access via Teleport |
+| Teleport for GKE | Yes | Registers as `k8s-developer-platform-gke` for kubectl access via Teleport |
 | GKE cluster | Single-node Standard, `e2-medium`, `us-central1-a` | Cost-effective (~$2-3/day), deletable for $0 |
 
 ### Connection Flow
@@ -41,8 +41,8 @@ AKS Cluster (portainer-rg, eastus)              GKE Cluster (dev-david, us-centr
 2. GCP firewall rule restricts port 9001 to the AKS cluster's outbound IP
 3. Portainer BE on AKS connects outbound to `<GKE-agent-IP>:9001`
 4. GKE appears as a second environment in the Portainer dashboard
-5. Teleport kube agent on GKE registers the cluster as `portainer-gke`
-6. `tsh kube ls` shows both `portainer-aks` and `portainer-gke`
+5. Teleport kube agent on GKE registers the cluster as `k8s-developer-platform-gke`
+6. `tsh kube ls` shows both `portainer-aks` and `k8s-developer-platform-gke`
 
 ---
 
@@ -135,7 +135,7 @@ scripts/
 ```bash
 # GKE configuration
 GCP_PROJECT="${GCP_PROJECT:?Set GCP_PROJECT in .envrc or environment}"
-GKE_CLUSTER_NAME="portainer-gke"
+GKE_CLUSTER_NAME="k8s-developer-platform-gke"
 GKE_ZONE="us-central1-a"
 GKE_MACHINE_TYPE="e2-medium"
 GKE_NODE_COUNT=1
@@ -160,7 +160,7 @@ export GCP_PROJECT="dev-david-024680"
 7. Write Portainer Agent scripts
 8. Write Teleport GKE agent scripts
 9. Execute: create cluster, install agent, configure firewall, register with Teleport
-10. Verify: GKE visible in Portainer UI, `portainer-gke` accessible via Teleport
+10. Verify: GKE visible in Portainer UI, `k8s-developer-platform-gke` accessible via Teleport
 11. Update docs (CLAUDE.md, README.md, CLAUDE.local.md)
 12. PR + code review
 

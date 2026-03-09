@@ -14,7 +14,7 @@ SUBSCRIPTION="${AZURE_SUBSCRIPTION:?Set AZURE_SUBSCRIPTION in .envrc or environm
 
 # --- GCP / GKE ---
 GCP_PROJECT="${GCP_PROJECT:?Set GCP_PROJECT in .envrc or environment}"
-GKE_CLUSTER_NAME="portainer-gke"
+GKE_CLUSTER_NAME="k8s-developer-platform-gke"
 GKE_ZONE="us-central1-a"
 GKE_MACHINE_TYPE="e2-medium"
 GKE_NODE_COUNT=1
