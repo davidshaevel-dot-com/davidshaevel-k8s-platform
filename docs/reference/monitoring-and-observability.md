@@ -195,7 +195,7 @@ The `cilium` CLI (`cilium hubble` subcommands) does **not** include `hubble obse
 
 Hubble UI provides a visual service map of network flows within a namespace. Pods appear as nodes, with arrows showing traffic between them (green = forwarded, red = dropped).
 
-**Important:** Hubble UI is per-cluster only. It connects to the local Hubble relay and only shows flows from the AKS cluster. GKE services do not appear — GKE would need its own observability (e.g., GKE flow logs, or Cilium via GKE Dataplane V2).
+**Important:** Hubble UI is per-cluster only. It connects to the local Hubble relay and only shows flows from that cluster. GKE services do not appear in the AKS Hubble UI — GKE has its own Hubble via Dataplane V2 (see [GKE Hubble Access](#gke-hubble-access-dataplane-v2) below).
 
 **1. Start the port-forward**
 
@@ -214,6 +214,70 @@ Navigate to http://localhost:12000
 - **teleport-cluster** — the most interesting view: shows the Teleport agent fanning out to all services across namespaces (Grafana, Portainer, Argo CD, davidshaevel-website), providing a live visualization of the zero-trust access architecture
 - Click any arrow to see individual flow details (source, destination, port, verdict)
 - Generate traffic by visiting the website or Grafana via Teleport to see flows appear in real time
+
+## GKE Hubble Access (Dataplane V2)
+
+GKE with Dataplane V2 runs Cilium internally and provides Hubble flow observability through the managed `gke-managed-dpv2-observability` namespace. Unlike AKS (where you need mTLS certs and a specific CLI version), GKE provides a `hubble-cli` container built into the relay pod — no local CLI install or certificate extraction needed.
+
+### Prerequisites
+
+- GKE cluster created with `--enable-dataplane-v2`
+- Observability enabled: `--enable-dataplane-v2-flow-observability --enable-dataplane-v2-metrics` (set at creation or via `gcloud container clusters update`)
+
+### Observing Flows
+
+```bash
+# Get GKE credentials
+gcloud container clusters get-credentials k8s-developer-platform-gke \
+  --zone us-central1-a --project <project-id>
+
+# Observe all flows in a namespace
+kubectl exec -it -n gke-managed-dpv2-observability \
+  deployment/hubble-relay -c hubble-cli -- \
+  hubble observe --namespace davidshaevel-website
+
+# Live stream
+kubectl exec -it -n gke-managed-dpv2-observability \
+  deployment/hubble-relay -c hubble-cli -- \
+  hubble observe --namespace davidshaevel-website --follow
+
+# Only dropped packets
+kubectl exec -it -n gke-managed-dpv2-observability \
+  deployment/hubble-relay -c hubble-cli -- \
+  hubble observe --namespace davidshaevel-website --verdict DROPPED
+```
+
+### GKE Flow Patterns (davidshaevel-website)
+
+The same three traffic patterns observed on AKS appear on GKE:
+
+```
+# 1. Kubelet health probes → frontend (every ~5s)
+10.4.0.1:50932 (host) -> davidshaevel-website/frontend-...:3000  policy-verdict:L3-Only INGRESS ALLOWED
+
+# 2. Kubelet health probes → backend (every ~5s)
+10.4.0.1:39730 (host) -> davidshaevel-website/backend-...:3001   policy-verdict:L3-Only INGRESS ALLOWED
+
+# 3. Backend → database queries (every ~10s, triggered by health checks)
+davidshaevel-website/backend-...:58328 -> davidshaevel-website/database-...:5432  to-endpoint FORWARDED
+davidshaevel-website/backend-...:58328 <- davidshaevel-website/database-...:5432  to-endpoint FORWARDED
+```
+
+All flows show `FORWARDED` — the Kubernetes NetworkPolicies (default-deny + allow intra-namespace + allow from Teleport) are enforced by GKE's Cilium dataplane.
+
+### Cross-Cloud Comparison: Hubble Access
+
+| | AKS (ACNS) | GKE (Dataplane V2) |
+|---|---|---|
+| **Hubble relay location** | `kube-system` namespace | `gke-managed-dpv2-observability` namespace |
+| **CLI access** | Local `hubble` CLI v0.13.x via port-forward | `kubectl exec` into relay pod's `hubble-cli` container |
+| **Authentication** | mTLS certs from `hubble-relay-client-certs` secret | None — exec into the pod directly |
+| **Setup steps** | Extract certs, port-forward, version-match CLI | Just `kubectl exec` |
+| **Network policies** | CiliumNetworkPolicy (identity-aware, L3/L4) | Standard Kubernetes NetworkPolicy (L3/L4) |
+| **Policy enforcement** | Cilium eBPF (managed by Azure) | Cilium eBPF (managed by Google) |
+| **GCP console integration** | N/A | Traffic flows in Observability tab |
+
+**Interview talking point — cross-cloud observability:** "Both clusters use Cilium under the hood, but the access patterns differ. On AKS, I use the standalone Hubble CLI with mTLS certificates extracted from a Kubernetes secret — ACNS runs an older relay version so the CLI needs to be version-matched. On GKE, Google bundles a `hubble-cli` container inside the relay pod, so I just `kubectl exec` in — no certs, no version matching. Same Cilium datapath, same flow visibility, different operational experience. Both show the same traffic patterns: kubelet probes, backend→database queries, and policy verdicts."
 
 ## Interview Talking Points
 
@@ -271,5 +335,5 @@ Navigate to http://localhost:12000
 | No built-in Cilium Grafana dashboards | Must import community dashboards manually and fix datasource references | Imported IDs 16611 and 18015, added `k8s_app` metricRelabeling |
 | No ServiceMonitor for Cilium by default | Prometheus doesn't scrape Cilium metrics out of the box | Created PodMonitor in `manifests/monitoring/cilium-podmonitor.yaml` |
 | Azure Monitor profile not configured | No Azure-native metrics integration | Using self-managed kube-prometheus-stack instead |
-| Hubble UI is per-cluster only | GKE services don't appear in AKS Hubble UI | GKE would need its own observability (GKE flow logs or Dataplane V2) |
+| Hubble UI is per-cluster only | GKE services don't appear in AKS Hubble UI | GKE has its own Hubble via Dataplane V2 (`kubectl exec` into relay pod) |
 | GKE lacks CiliumNetworkPolicy CRDs | Can't use identity-aware policies on GKE without GKE Enterprise | Standard Kubernetes NetworkPolicy with `namespaceSelector` instead |
