@@ -13,6 +13,8 @@ env:
   CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
   TELEPORT_ACME_EMAIL: ${{ secrets.TELEPORT_ACME_EMAIL }}
   PORTAINER_ADMIN_PASSWORD: ${{ secrets.PORTAINER_ADMIN_PASSWORD }}
+  ACR_SP_APP_ID: ${{ secrets.ACR_SP_APP_ID }}
+  ACR_SP_PASSWORD: ${{ secrets.ACR_SP_PASSWORD }}
   TELEPORT_DOMAIN: teleport.davidshaevel.com
 
 jobs:
@@ -43,6 +45,12 @@ jobs:
       - name: Setup Helm
         uses: azure/setup-helm@v4
 
+      - name: Setup Argo CD CLI
+        run: |
+          curl -sSL -o argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          chmod +x argocd
+          sudo mv argocd /usr/local/bin/
+
       - name: Get AKS Credentials
         run: ./scripts/aks/credentials.sh
 
@@ -63,6 +71,21 @@ jobs:
 
       - name: Install Teleport Agent
         run: ./scripts/teleport/gke-agent-install.sh
+
+      - name: Set up ACR Pull Secret
+        run: ./scripts/gke/acr-pull-secret.sh
+
+      - name: Switch to AKS Context for Argo CD
+        run: ./scripts/aks/credentials.sh
+
+      - name: Register GKE in Argo CD
+        run: ./scripts/gke/argocd-cluster-add.sh
+
+      - name: Apply Network Policies
+        run: ./scripts/gke/apply-network-policies.sh
+
+      - name: Register Website in Teleport
+        run: ./scripts/website/gke-teleport-register.sh
 
       - name: Verify
         run: |
@@ -86,9 +109,13 @@ jobs:
         run: |
           echo "## GKE Start Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **GKE Cluster:** k8s-developer-platform-gke" >> $GITHUB_STEP_SUMMARY
+          echo "- **GKE Cluster:** k8s-developer-platform-gke (Dataplane V2)" >> $GITHUB_STEP_SUMMARY
           echo "- **Portainer Agent:** Installed and registered" >> $GITHUB_STEP_SUMMARY
           echo "- **Teleport Agent:** Installed (k8s-developer-platform-gke)" >> $GITHUB_STEP_SUMMARY
+          echo "- **ACR Pull Secret:** Configured" >> $GITHUB_STEP_SUMMARY
+          echo "- **Argo CD:** GKE cluster registered" >> $GITHUB_STEP_SUMMARY
+          echo "- **Network Policies:** Applied" >> $GITHUB_STEP_SUMMARY
+          echo "- **Website:** Registered in Teleport" >> $GITHUB_STEP_SUMMARY
 
       - name: Cleanup on Failure
         if: failure()

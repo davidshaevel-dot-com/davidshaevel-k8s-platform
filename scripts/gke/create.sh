@@ -21,7 +21,10 @@ gcloud container clusters create "${GKE_CLUSTER_NAME}" \
     --project="${GCP_PROJECT}" \
     --zone="${GKE_ZONE}" \
     --num-nodes="${GKE_NODE_COUNT}" \
-    --machine-type="${GKE_MACHINE_TYPE}"
+    --machine-type="${GKE_MACHINE_TYPE}" \
+    --enable-dataplane-v2 \
+    --enable-dataplane-v2-flow-observability \
+    --enable-dataplane-v2-metrics
 
 echo ""
 echo "GKE cluster '${GKE_CLUSTER_NAME}' created successfully."

@@ -1,6 +1,6 @@
 # Kubernetes Developer Platform
 
-A multi-cloud Kubernetes developer platform with zero-trust access, cost-optimized lifecycle automation, and programmatic environment registration. Manages AKS and GKE clusters through Portainer Business Edition with Teleport-secured access — no direct public endpoints exposed.
+A multi-cloud Kubernetes developer platform with zero-trust access, GitOps deployments, full-stack observability, and cost-optimized lifecycle automation. Manages AKS and GKE clusters through a single Argo CD instance with Teleport-secured access — no direct public endpoints exposed.
 
 Built following the [Build Your First Kubernetes Developer Platform](https://rawkode.academy/learning-paths/build-your-first-kubernetes-developer-platform) learning path from Rawkode Academy.
 
@@ -13,53 +13,64 @@ Internet
 Azure Load Balancer (port 443)
     |
     v
-AKS Cluster (k8s-developer-platform-rg, eastus)
+AKS Cluster (eastus) — always-on primary
     |
     +-- teleport-cluster namespace
-    |       |
     |       +-- Teleport Proxy (HTTPS, LoadBalancer)
-    |       |       Web UI:   https://teleport.<your-domain>.com
-    |       |       App Proxy: routes to Portainer (ClusterIP)
-    |       |       K8s Proxy: authenticated kubectl access
-    |       |
+    |       |       Web UI, App Proxy, K8s Proxy
     |       +-- Teleport Auth (ClusterIP)
-    |       +-- Teleport Agent (app + kube registration)
+    |       +-- Teleport Agent (registers apps + kube clusters)
     |
     +-- portainer namespace
-    |       |
-    |       Portainer BE (ClusterIP, port 9443 HTTPS)
-    |           (no public IP, accessed via Teleport)
+    |       Portainer BE (ClusterIP, accessed via Teleport)
     |           Manages: AKS (local) + GKE (remote agent)
     |
     +-- argocd namespace
-    |       |
-    |       Argo CD (ClusterIP, HTTP)
-    |           (no public IP, accessed via Teleport)
-    |           GitOps: syncs platform components from Git
+    |       Argo CD (ClusterIP, accessed via Teleport)
+    |           Manages: davidshaevel-website on AKS + GKE
     |
-    +-- (future namespaces: Crossplane, monitoring)
+    +-- monitoring namespace
+    |       +-- Prometheus (metrics, 7d retention)
+    |       +-- Grafana (dashboards, accessed via Teleport)
+    |       +-- Node Exporter, Kube State Metrics
+    |
+    +-- davidshaevel-website namespace
+    |       +-- Frontend (Next.js, port 3000)
+    |       +-- Backend (NestJS, port 3001)
+    |       +-- Database (PostgreSQL 15)
+    |
+    +-- kube-system namespace (Azure-managed)
+            +-- Cilium (eBPF CNI via Azure CNI Overlay)
+            +-- Hubble Relay + UI (network flow observability via ACNS)
 
-GKE Cluster (us-central1-a)
+GKE Cluster (us-central1-a) — ephemeral secondary
+    |
+    +-- davidshaevel-website namespace
+    |       +-- Frontend, Backend, Database
+    |       (same manifests, pulls from ACR via image pull secret)
     |
     +-- portainer namespace
-    |       +-- Portainer Agent (LoadBalancer, port 9001)
-    |               (loadBalancerSourceRanges: AKS egress IP only)
+    |       +-- Portainer Agent (LoadBalancer, AKS egress IP only)
     |
     +-- teleport-cluster namespace
-            +-- Teleport Kube Agent (kubectl access via Teleport)
+            +-- Teleport Kube Agent + Website App
 ```
 
-All traffic flows through Teleport. Portainer has no public endpoint. The GKE Portainer Agent LoadBalancer is restricted to the AKS cluster's egress IP via `loadBalancerSourceRanges`.
+All traffic flows through Teleport — no services have direct public endpoints except the Teleport proxy. One Argo CD instance on AKS manages both clusters. GKE is fully ephemeral: when deleted and recreated, Argo CD auto-syncs everything back.
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|------------|
 | Cloud | Azure (AKS), Google Cloud (GKE) |
-| Container Orchestration | Kubernetes (multi-cluster, Azure CNI Overlay + Cilium) |
+| Container Orchestration | Kubernetes (multi-cluster) |
+| Networking | Azure CNI Overlay + Cilium (AKS), Dataplane V2 (GKE) |
+| Container Registry | Azure Container Registry (ACR) |
 | Platform Management | Portainer Business Edition |
-| Secure Access | Teleport Community Edition (self-hosted) |
-| GitOps | Argo CD (declarative deployments from Git) |
+| Secure Access | Teleport Community Edition (self-hosted, zero-trust) |
+| GitOps | Argo CD (single control plane, multi-cluster) |
+| Monitoring | kube-prometheus-stack (Prometheus + Grafana) |
+| Network Observability | Hubble (ACNS) — flow logs, service map, metrics |
 | CI/CD | GitHub Actions (workflow_dispatch) |
 | DNS | Cloudflare (API-managed) |
 | TLS | Let's Encrypt (ACME via Teleport) |
@@ -73,7 +84,7 @@ All workflows are triggered manually via `workflow_dispatch` from the GitHub Act
 |----------|-------------|
 | **AKS Start** | Start the AKS cluster, wait for pods, update Cloudflare DNS, verify Teleport accessibility |
 | **AKS Stop** | Delete Cloudflare DNS records, stop the AKS cluster to save costs |
-| **GKE Start** | Create GKE cluster, install Portainer Agent, register in Portainer via API, install Teleport Agent. Auto-deletes cluster on failure to prevent costs |
+| **GKE Start** | Orchestrated rebuild: create cluster (Dataplane V2), install Portainer/Teleport agents, set up ACR pull secret, register in Argo CD, apply network policies, register website in Teleport |
 | **GKE Stop** | Deregister from Portainer via API, delete the GKE cluster |
 
 **AKS Stop** and **GKE Stop** have workflow inputs shown in the "Run workflow" dialog:
@@ -203,11 +214,26 @@ Then run the setup scripts:
    ./scripts/argocd/teleport-register.sh
    ```
 
-8. **Add a GKE cluster** (optional, multi-cluster setup):
+8. **Install monitoring stack** (Prometheus + Grafana):
 
    ```bash
-   ./scripts/gke/start.sh
+   ./scripts/monitoring/install.sh
+   ./scripts/monitoring/teleport-register.sh
    ```
+
+9. **Enable Cilium observability** (Hubble):
+
+   ```bash
+   ./scripts/cilium/hubble-enable.sh
+   ./scripts/cilium/hubble-ui-install.sh
+   ./scripts/cilium/apply-policies.sh
+   ```
+
+10. **Add a GKE cluster** (optional, multi-cluster setup):
+
+    ```bash
+    ./scripts/gke/start.sh
+    ```
 
 ## Scripts
 
@@ -217,7 +243,7 @@ All scripts source `scripts/config.sh` for shared configuration. When running lo
 
 | Script | Description |
 |--------|-------------|
-| `aks/create.sh` | Create the AKS cluster (Azure CNI Overlay + Cilium) |
+| `aks/create.sh` | Create the AKS cluster (Azure CNI Overlay + Cilium + ACNS) |
 | `aks/delete.sh` | Delete the AKS cluster |
 | `aks/start.sh` | Start a stopped cluster |
 | `aks/stop.sh` | Stop the cluster (save costs) |
@@ -228,12 +254,15 @@ All scripts source `scripts/config.sh` for shared configuration. When running lo
 
 | Script | Description |
 |--------|-------------|
-| `gke/create.sh` | Create the GKE cluster (enables API if needed) |
+| `gke/create.sh` | Create the GKE cluster (Dataplane V2, enables API if needed) |
 | `gke/delete.sh` | Delete the GKE cluster (interactive, requires confirmation) |
-| `gke/start.sh` | Orchestrated rebuild (create + agents + registration) |
+| `gke/start.sh` | Orchestrated rebuild (create + agents + ACR + Argo CD + policies + Teleport) |
 | `gke/stop.sh` | Delete the GKE cluster (non-interactive, for scripted use) |
 | `gke/status.sh` | Show cluster status |
 | `gke/credentials.sh` | Fetch kubeconfig credentials |
+| `gke/acr-pull-secret.sh` | Create ACR image pull secret for cross-cloud image access |
+| `gke/argocd-cluster-add.sh` | Register GKE as a remote cluster in Argo CD |
+| `gke/apply-network-policies.sh` | Apply Kubernetes NetworkPolicy for namespace isolation |
 
 ### Portainer (`scripts/portainer/`)
 
@@ -271,6 +300,40 @@ All scripts source `scripts/config.sh` for shared configuration. When running lo
 | `argocd/status.sh` | Show Argo CD deployment status and applications |
 | `argocd/teleport-register.sh` | Register Argo CD as a Teleport application |
 
+### Monitoring (`scripts/monitoring/`)
+
+| Script | Description |
+|--------|-------------|
+| `monitoring/install.sh` | Install kube-prometheus-stack (Prometheus + Grafana) via Helm |
+| `monitoring/uninstall.sh` | Uninstall the monitoring stack |
+| `monitoring/status.sh` | Show monitoring stack status |
+| `monitoring/teleport-register.sh` | Register Grafana as a Teleport application |
+
+### Cilium / Hubble (`scripts/cilium/`)
+
+| Script | Description |
+|--------|-------------|
+| `cilium/status.sh` | Show Cilium, Hubble, and network policy status |
+| `cilium/apply-policies.sh` | Apply CiliumNetworkPolicy namespace isolation on AKS |
+| `cilium/hubble-enable.sh` | Enable Hubble relay and UI via ACNS |
+| `cilium/hubble-disable.sh` | Disable Hubble relay and UI |
+| `cilium/hubble-ui-install.sh` | Install Hubble UI on AKS |
+| `cilium/hubble-ui-uninstall.sh` | Uninstall Hubble UI |
+
+### ACR (`scripts/acr/`)
+
+| Script | Description |
+|--------|-------------|
+| `acr/create.sh` | Create Azure Container Registry |
+| `acr/delete.sh` | Delete Azure Container Registry |
+
+### Website (`scripts/website/`)
+
+| Script | Description |
+|--------|-------------|
+| `website/teleport-register.sh` | Register AKS website as a Teleport application |
+| `website/gke-teleport-register.sh` | Register GKE website as a Teleport application |
+
 ### GitHub Actions Setup (`scripts/github/`)
 
 | Script | Description |
@@ -291,6 +354,8 @@ Defined in `.envrc` (gitignored). See [.envrc.example](.envrc.example) for the t
 | `CLOUDFLARE_ZONE_ID` | Cloudflare zone ID for the domain |
 | `TELEPORT_ACME_EMAIL` | Email for Let's Encrypt certificate notifications |
 | `PORTAINER_ADMIN_PASSWORD` | Portainer admin password for API automation |
+| `ACR_SP_APP_ID` | Service principal app ID for GKE→ACR image pull |
+| `ACR_SP_PASSWORD` | Service principal password for GKE→ACR image pull |
 | `TELEPORT_DOMAIN` | Teleport domain (defaults to teleport.davidshaevel.com) |
 
 ## Project Management
@@ -306,8 +371,9 @@ Defined in `.envrc` (gitignored). See [.envrc.example](.envrc.example) for the t
 | AKS Standard_B4ls_v2 node (1x) | ~$107 | $0 |
 | AKS Load Balancer (Teleport) | ~$18 | $0 |
 | AKS Managed Disks (PVs) | ~$1-5 | ~$1-5 |
+| ACR Basic tier | ~$5 | ~$5 |
 | GKE Standard (e2-standard-2, 1 node) | ~$49 | $0 (deleted) |
-| **Total** | **~$180-185** | **~$1-5** |
+| **Total** | **~$185-190** | **~$6-10** |
 
 GKE has no stop/start — the **GKE Stop** workflow deletes the cluster entirely ($0), and **GKE Start** rebuilds it from scratch. AKS can be stopped and restarted without data loss (persistent volumes are retained). Managed disks are the only cost when both clusters are down.
 

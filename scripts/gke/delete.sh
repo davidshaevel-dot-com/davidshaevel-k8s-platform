@@ -20,4 +20,4 @@ gcloud container clusters delete "${GKE_CLUSTER_NAME}" \
     --zone="${GKE_ZONE}" \
     --quiet
 
-echo "Cluster '${GKE_CLUSTER_NAME}' deleted. Cost is now $0."
+echo "Cluster '${GKE_CLUSTER_NAME}' deleted. Cost is now \$0."
