@@ -5,6 +5,16 @@
 **Interview angles:**
 - Argo CD multi-cluster management from a single control plane
 - Troubleshooting cross-cloud differences (image pull, networking, access)
+- Multi-cloud deployment patterns (blue/green, canary, active/active)
+- Why build a multi-cloud platform in the first place
+
+## Why Multi-Cloud?
+
+This platform exists to demonstrate the operational skills an SRE needs when managing workloads across cloud providers — not because the application requires it, but because real platform teams deal with this complexity daily.
+
+**Interview talking point — why multi-cloud:** "The multi-cloud setup demonstrates three things I'd encounter on a real platform team. First, **operational consistency**: the same manifests deploy to both AKS and GKE via Argo CD, but the infrastructure differs — AKS uses managed identity for ACR, GKE uses a service principal with an image pull secret. Second, **cross-cloud troubleshooting**: GKE doesn't expose CiliumNetworkPolicy CRDs like AKS does, so I had to adapt the network policies to standard Kubernetes NetworkPolicy. CiliumNetworkPolicy uses Cilium endpoint identities (`k8s:io.kubernetes.pod.namespace`), while standard NetworkPolicy uses Kubernetes label selectors (`namespaceSelector`). Third, **single control plane management**: one Argo CD instance on AKS manages both clusters, and when GKE is torn down and recreated, Argo CD auto-syncs everything back — the cluster is fully ephemeral."
+
+**Interview talking point — cost awareness:** "I designed the platform to be cost-conscious. AKS is the always-on primary (~$130/month), GKE is ephemeral and gets deleted when not in use ($0 when stopped). The whole platform can be stopped for ~$10-15/month with only storage persisting. This mirrors how you'd manage non-production environments in a real organization — spin up when needed, tear down when done."
 
 ---
 
@@ -93,3 +103,17 @@ Both deployments use the same manifests from `manifests/davidshaevel-website/`. 
 ## Future Extensibility
 
 Adding a Cloudflare load balancer with `dev.davidshaevel.com` pointing to both clusters would be additive — add LoadBalancer/Ingress manifests and Cloudflare DNS records. No redesign needed.
+
+### Deployment Patterns Enabled by Multi-Cloud
+
+Currently, both Argo CD Applications point to the same manifests on `main`, so both clusters always run the same version. To deploy different versions, you could use separate manifest directories, Kustomize overlays, or different `targetRevision` branches per Application.
+
+With a Cloudflare load balancer in front of both clusters, the platform enables:
+
+| Pattern | How It Would Work |
+|---------|-------------------|
+| **Blue/Green** | 100% traffic to AKS (v1). Deploy v2 to GKE, test via Teleport. Flip Cloudflare to send 100% to GKE. Roll back by flipping again. |
+| **Canary** | Cloudflare weighted routing: 95% to AKS (v1), 5% to GKE (v2). Gradually shift weight as confidence grows. Monitor error rates in Grafana. |
+| **Active/Active** | Both clusters run the same version. Cloudflare load-balances for geographic redundancy or failover. |
+
+**Interview talking point — deployment patterns:** "The platform is architected so that adding canary or blue/green deployments is a configuration change, not a redesign. Both clusters already run the same app via Argo CD. To do a canary, I'd point the GKE Application at a different branch or Kustomize overlay with the new image tag, add Cloudflare weighted DNS in front of both, and shift traffic gradually. Grafana and Hubble give me the observability to monitor error rates and traffic patterns during the rollout. The building blocks — multi-cluster GitOps, per-cluster network policies, centralized monitoring — are already in place."
