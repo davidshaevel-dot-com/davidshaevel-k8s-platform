@@ -15,7 +15,7 @@ echo ""
 echo "Installing Portainer BE in namespace 'portainer'..."
 echo "  Service type:     ClusterIP (accessed via Teleport)"
 echo "  Edition:          Business (Enterprise)"
-echo "  Image tag:        lts"
+echo "  Image tag:        (chart default)"
 echo "  Trusted origins:  ${TRUSTED_ORIGIN}"
 echo ""
 
@@ -25,7 +25,7 @@ echo ""
 helm upgrade --install --create-namespace --wait -n portainer portainer portainer/portainer \
     --set service.type=ClusterIP \
     --set enterpriseEdition.enabled=true \
-    --set image.tag=lts
+    --set tls.force=true
 
 # Workaround: The Portainer Helm chart wraps --trusted-origins values in escaped
 # double quotes, causing CSRF validation to fail. Patch the deployment args directly

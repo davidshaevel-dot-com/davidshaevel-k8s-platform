@@ -10,8 +10,7 @@
 enterpriseEdition:
   enabled: true
 
-image:
-  tag: lts
+# image.tag intentionally omitted — use the chart's default (matches chart version)
 
 service:
   type: ClusterIP
