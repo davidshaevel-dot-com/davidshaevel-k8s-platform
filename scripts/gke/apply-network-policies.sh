@@ -12,13 +12,18 @@ gcloud container clusters get-credentials "${GKE_CLUSTER_NAME}" \
     --project="${GCP_PROJECT}" \
     --zone="${GKE_ZONE}"
 
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+
 echo "Applying GKE network policies..."
-kubectl apply -f manifests/cilium/gke-namespace-isolation.yaml
+kubectl apply -f "${REPO_ROOT}/manifests/cilium/gke-namespace-isolation.yaml"
 
 echo ""
 echo "Network policies:"
 kubectl get networkpolicies -n davidshaevel-website
-kubectl get ciliumnetworkpolicies -n davidshaevel-website
+# CiliumNetworkPolicy CRDs are only available on AKS (ACNS). Skip on GKE.
+if kubectl api-resources --api-group=cilium.io 2>/dev/null | grep -q ciliumnetworkpolicies; then
+    kubectl get ciliumnetworkpolicies -n davidshaevel-website
+fi
 
 # Switch back to AKS context.
 echo ""

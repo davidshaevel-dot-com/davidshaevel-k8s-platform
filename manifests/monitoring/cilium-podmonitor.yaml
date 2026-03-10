@@ -1,0 +1,26 @@
+# PodMonitor to scrape Cilium agent Prometheus metrics.
+# Cilium agent exposes metrics on port 9962 (hostPort named "prometheus").
+# Requires the kube-prometheus-stack release label to be picked up by Prometheus.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: cilium-agent
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames:
+      - kube-system
+  selector:
+    matchLabels:
+      k8s-app: cilium
+  podMetricsEndpoints:
+    - port: prometheus
+      interval: 30s
+      path: /metrics
+      metricRelabelings:
+        # Add k8s_app label to all scraped metrics.
+        # Cilium Grafana dashboards filter on k8s_app="cilium".
+        - targetLabel: k8s_app
+          replacement: cilium
