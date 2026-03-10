@@ -963,89 +963,117 @@ Confirm pods are back to Running, restarts stabilized, metrics normal.
 
 ## Task 9: Simulate Network-Level Incident
 
-**Goal:** Apply a Cilium policy that blocks frontend→backend traffic, diagnose with Hubble, fix.
+**Goal:** Apply a Cilium policy that blocks backend→database traffic, diagnose with Hubble and Grafana, fix.
 
-**Step 1: Start observing Hubble flows**
+**Why backend→database:** The original plan blocked frontend→backend, but the frontend is a static Next.js app with no server-side calls to the backend. The backend→database flow (port 5432) is the most active inter-pod dependency — blocking it causes the backend health check to fail, triggering pod restarts visible in Grafana.
+
+**Step 1: Open observability tools**
+
+Open in separate tabs/terminals:
+- Grafana: "Kubernetes / Compute Resources / Namespace (Pods)" filtered to `davidshaevel-website`
+- Hubble UI: http://localhost:12000 → `davidshaevel-website` namespace
+- Hubble CLI (optional):
 
 ```bash
-# In one terminal, port-forward Hubble UI or use CLI
-kubectl port-forward svc/hubble-relay -n kube-system 4245:443 &
-hubble observe --namespace davidshaevel-website --follow
+# Port-forward hubble-relay (if not already running)
+kubectl port-forward -n kube-system svc/hubble-relay 4245:443 &
+
+# Observe flows with mTLS
+hubble observe --namespace davidshaevel-website --follow \
+  --tls --tls-ca-cert-files /tmp/hubble-ca.crt \
+  --tls-client-cert-file /tmp/hubble-client.crt \
+  --tls-client-key-file /tmp/hubble-client.key \
+  --tls-server-name "*.hubble-relay.cilium.io"
 ```
 
-**Step 2: Verify frontend can reach backend**
+**Step 2: Verify baseline**
+
+Note the normal state: backend pods are healthy, backend→database:5432 flows show FORWARDED in Hubble, no restarts in Grafana.
 
 ```bash
-# Port-forward frontend and hit a page that calls the backend API
-kubectl port-forward svc/frontend -n davidshaevel-website 3000:3000 &
-curl -s http://localhost:3000
-# Should return HTML that loaded data from backend
+kubectl get pods -n davidshaevel-website
+# Expected: frontend, backend, database all Running/Ready
 ```
 
 **Step 3: Apply a blocking policy**
 
-Create a temporary policy that denies frontend→backend:
+Create a CiliumNetworkPolicy that restricts database ingress to only database→database, blocking backend→database:
 
 ```bash
 cat <<'EOF' | kubectl apply -f -
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
-  name: block-frontend-to-backend
+  name: block-backend-to-database
   namespace: davidshaevel-website
 spec:
   endpointSelector:
     matchLabels:
-      component: backend
+      component: database
   ingress:
     - fromEndpoints:
         - matchLabels:
-            component: backend
+            component: database
 EOF
 ```
-
-This replaces the allow-all intra-namespace rule for backend pods — only backend→backend is allowed, frontend→backend is now denied.
 
 **Step 4: Observe the failure**
 
 ```bash
-# Try to access the frontend (it should fail to load backend data)
-curl -s http://localhost:3000
+# Watch pods — expect backend to start failing health checks and restarting
+kubectl get pods -n davidshaevel-website -w
 
-# Check Hubble flows — look for DROPPED packets
-hubble observe --namespace davidshaevel-website --verdict DROPPED
+# Check Hubble flows — look for DROPPED packets on port 5432
+hubble observe --namespace davidshaevel-website --verdict DROPPED \
+  --tls --tls-ca-cert-files /tmp/hubble-ca.crt \
+  --tls-client-cert-file /tmp/hubble-client.crt \
+  --tls-client-key-file /tmp/hubble-client.key \
+  --tls-server-name "*.hubble-relay.cilium.io"
 ```
 
-In Hubble UI: you should see red lines (dropped flows) from frontend to backend.
+In Grafana: watch for pod restart count increasing on the backend.
+In Hubble UI: red lines (dropped flows) from backend to database.
 
 **Step 5: Troubleshoot (practice narrating)**
 
 ```bash
-# "I can see dropped packets in Hubble. Let me check what policies are active."
+# "I can see the backend pod is restarting. Let me check its logs."
+kubectl logs -n davidshaevel-website -l component=backend --tail=20
+
+# "Connection refused to the database. Let me check Hubble for dropped flows."
+# (Hubble shows DROPPED on port 5432 from backend to database)
+
+# "There are dropped packets between backend and database. Let me check network policies."
 kubectl get ciliumnetworkpolicies -n davidshaevel-website
 
-# "There's a block-frontend-to-backend policy. Let me inspect it."
-kubectl describe ciliumnetworkpolicy block-frontend-to-backend -n davidshaevel-website
+# "There's a block-backend-to-database policy. Let me inspect it."
+kubectl describe ciliumnetworkpolicy block-backend-to-database -n davidshaevel-website
 
-# "This policy is restricting backend ingress to only backend pods.
-# Frontend traffic is being denied. Let me remove this policy."
+# "This policy is restricting database ingress to only database pods.
+# Backend traffic to port 5432 is being denied. Let me remove this policy."
 ```
 
 **Step 6: Fix by removing the blocking policy**
 
 ```bash
-kubectl delete ciliumnetworkpolicy block-frontend-to-backend -n davidshaevel-website
+kubectl delete ciliumnetworkpolicy block-backend-to-database -n davidshaevel-website
 ```
 
 **Step 7: Verify recovery**
 
 ```bash
-curl -s http://localhost:3000
-# Should work again
+# Watch pods recover
+kubectl get pods -n davidshaevel-website -w
 
-# Hubble flows should show FORWARDED packets again
-hubble observe --namespace davidshaevel-website --verdict FORWARDED
+# Hubble flows should show FORWARDED packets to database again
+hubble observe --namespace davidshaevel-website --verdict FORWARDED \
+  --tls --tls-ca-cert-files /tmp/hubble-ca.crt \
+  --tls-client-cert-file /tmp/hubble-client.crt \
+  --tls-client-key-file /tmp/hubble-client.key \
+  --tls-server-name "*.hubble-relay.cilium.io"
 ```
+
+In Grafana: confirm backend pod restarts stabilize, CPU/memory return to baseline.
 
 No commit needed — this was a live simulation, not a persisted change.
 
