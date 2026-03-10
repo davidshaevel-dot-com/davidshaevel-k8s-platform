@@ -191,6 +191,30 @@ The ACNS-managed Hubble relay on AKS runs an older image (`mcr.microsoft.com/oss
 
 The `cilium` CLI (`cilium hubble` subcommands) does **not** include `hubble observe` — it only wraps management commands (`enable`, `disable`, `port-forward`, `ui`). The standalone `hubble` CLI is required for flow observation.
 
+### Hubble UI
+
+Hubble UI provides a visual service map of network flows within a namespace. Pods appear as nodes, with arrows showing traffic between them (green = forwarded, red = dropped).
+
+**Important:** Hubble UI is per-cluster only. It connects to the local Hubble relay and only shows flows from the AKS cluster. GKE services do not appear — GKE would need its own observability (e.g., GKE flow logs, or Cilium via GKE Dataplane V2).
+
+**1. Start the port-forward**
+
+```bash
+kubectl port-forward -n kube-system svc/hubble-ui 12000:80 &
+```
+
+**2. Open in browser**
+
+Navigate to http://localhost:12000
+
+**3. Explore**
+
+- Select a namespace from the dropdown at the top
+- **davidshaevel-website** — shows frontend, backend, database pods with traffic flows
+- **teleport-cluster** — the most interesting view: shows the Teleport agent fanning out to all services across namespaces (Grafana, Portainer, Argo CD, davidshaevel-website), providing a live visualization of the zero-trust access architecture
+- Click any arrow to see individual flow details (source, destination, port, verdict)
+- Generate traffic by visiting the website or Grafana via Teleport to see flows appear in real time
+
 ## Interview Talking Points
 
 ### Grafana / Cilium Metrics
