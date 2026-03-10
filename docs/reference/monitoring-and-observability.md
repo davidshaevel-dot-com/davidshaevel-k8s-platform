@@ -244,3 +244,32 @@ Navigate to http://localhost:12000
 **Why this matters:** "This is the zero-trust model in action. Teleport authenticates and authorizes every request before it reaches any backend service. In the Hubble UI, you can literally see that there are no direct ingress flows from outside the cluster to any application pod — everything is mediated by the Teleport agent. If someone asks 'how do you access Grafana?' or 'how do you access Argo CD?', I can point to this view and show that it all goes through one authenticated gateway."
 
 **Network policy enforcement:** "The Hubble UI also validates that the CiliumNetworkPolicies are working correctly. Each namespace has a default-deny-ingress policy, and the only allowed cross-namespace traffic is from the teleport-cluster namespace via `allow-from-teleport` rules. In the Hubble UI, you see green lines (forwarded) from Teleport to each service, and if you tried to access a service from any other namespace, you'd see a red line (dropped). It's a visual proof that the network segmentation is enforced at the kernel level by Cilium's eBPF datapath."
+
+## Task 7 Summary: What We Found
+
+### Most Useful Dashboards
+
+1. **Kubernetes / Compute Resources / Namespace (Pods)** — first stop for checking application health (CPU, memory, restarts per namespace)
+2. **Cilium Agent Metrics** — forwarded/dropped packets, policy enforcement status, endpoint state. Critical for network policy debugging.
+3. **Node Exporter / Nodes** — node-level resource usage, important for capacity planning on single-node clusters
+4. **Hubble UI (teleport-cluster namespace)** — live architecture diagram showing the zero-trust access pattern across all services
+
+### What ACNS Provides
+
+- **Cilium as the CNI** — Azure manages the Cilium DaemonSet, upgrades, and configuration. No manual Cilium install or lifecycle management.
+- **CiliumNetworkPolicy CRDs** — L3/L4 identity-aware policies beyond standard Kubernetes NetworkPolicy.
+- **Hubble relay and UI** — network flow observability with mTLS-secured relay, installed automatically via ACNS.
+- **Prometheus metrics endpoint** — Cilium agent exposes 139+ metrics on port 9962 (hostPort), ready to scrape.
+- **eBPF datapath** — kernel-level packet processing without iptables overhead.
+
+### Gaps and Limitations
+
+| Gap | Impact | Workaround |
+|-----|--------|------------|
+| No Hubble metrics export to Prometheus | Cilium Policy Verdicts dashboard (18015) has no data — `hubble_policy_verdicts_total` is not scraped | Use Hubble CLI/UI for per-flow policy verdicts instead |
+| ACNS runs old Hubble relay (v1.15.0) | Newer hubble CLI (v1.18+) fails with gRPC ALPN error | Pin hubble CLI to v0.13.x |
+| No built-in Cilium Grafana dashboards | Must import community dashboards manually and fix datasource references | Imported IDs 16611 and 18015, added `k8s_app` metricRelabeling |
+| No ServiceMonitor for Cilium by default | Prometheus doesn't scrape Cilium metrics out of the box | Created PodMonitor in `manifests/monitoring/cilium-podmonitor.yaml` |
+| Azure Monitor profile not configured | No Azure-native metrics integration | Using self-managed kube-prometheus-stack instead |
+| Hubble UI is per-cluster only | GKE services don't appear in AKS Hubble UI | GKE would need its own observability (GKE flow logs or Dataplane V2) |
+| GKE lacks CiliumNetworkPolicy CRDs | Can't use identity-aware policies on GKE without GKE Enterprise | Standard Kubernetes NetworkPolicy with `namespaceSelector` instead |
