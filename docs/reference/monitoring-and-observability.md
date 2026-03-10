@@ -273,9 +273,10 @@ All flows show `FORWARDED` — the Kubernetes NetworkPolicies (default-deny + al
 | **CLI access** | Local `hubble` CLI v0.13.x via port-forward | `kubectl exec` into relay pod's `hubble-cli` container |
 | **Authentication** | mTLS certs from `hubble-relay-client-certs` secret | None — exec into the pod directly |
 | **Setup steps** | Extract certs, port-forward, version-match CLI | Just `kubectl exec` |
+| **Hubble UI** | Yes — `kubectl port-forward svc/hubble-ui 12000:80` | No — use GCP Console traffic flows instead |
 | **Network policies** | CiliumNetworkPolicy (identity-aware, L3/L4) | Standard Kubernetes NetworkPolicy (L3/L4) |
 | **Policy enforcement** | Cilium eBPF (managed by Azure) | Cilium eBPF (managed by Google) |
-| **GCP console integration** | N/A | Traffic flows in Observability tab |
+| **Visual service map** | Hubble UI (localhost:12000) | GCP Console → Observability → Traffic flows |
 
 **Interview talking point — cross-cloud observability:** "Both clusters use Cilium under the hood, but the access patterns differ. On AKS, I use the standalone Hubble CLI with mTLS certificates extracted from a Kubernetes secret — ACNS runs an older relay version so the CLI needs to be version-matched. On GKE, Google bundles a `hubble-cli` container inside the relay pod, so I just `kubectl exec` in — no certs, no version matching. Same Cilium datapath, same flow visibility, different operational experience. Both show the same traffic patterns: kubelet probes, backend→database queries, and policy verdicts."
 
