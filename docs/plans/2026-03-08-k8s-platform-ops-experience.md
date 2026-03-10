@@ -961,15 +961,28 @@ Confirm pods are back to Running, restarts stabilized, metrics normal.
 
 ---
 
-## Task 9: Simulate Network-Level Incident
+## Task 9: Simulate Network-Level Incident (Multi-Cloud)
 
-**Goal:** Apply a Cilium policy that blocks backend→database traffic, diagnose with Hubble and Grafana, fix.
+**Goal:** Block backend→database traffic on both AKS and GKE, diagnose with each cluster's observability tools, fix. Same incident, different tools and policy types — demonstrates cross-cloud troubleshooting.
 
 **Why backend→database:** The original plan blocked frontend→backend, but the frontend is a static Next.js app with no server-side calls to the backend. The backend→database flow (port 5432) is the most active inter-pod dependency — blocking it causes the backend health check to fail, triggering pod restarts visible in Grafana.
 
-**Step 1: Open observability tools**
+**Cross-cloud comparison:**
 
-Open in separate tabs/terminals:
+| | AKS | GKE |
+|---|---|---|
+| **Block with** | CiliumNetworkPolicy | Standard Kubernetes NetworkPolicy |
+| **Diagnose with** | Hubble CLI (mTLS) + Hubble UI + Grafana | Hubble CLI (`kubectl exec`) + GCP Console |
+| **See drops in** | Hubble UI (red lines) + Cilium Agent Metrics dashboard | GCP Console → Observability → Traffic flows |
+| **Fix by** | `kubectl delete cnp` | `kubectl delete networkpolicy` |
+
+---
+
+### Part A: AKS Incident
+
+**Step 1: Open observability tools (AKS)**
+
+Ensure kubectl context is AKS. Open in separate tabs/terminals:
 - Grafana: "Kubernetes / Compute Resources / Namespace (Pods)" filtered to `davidshaevel-website`
 - Hubble UI: http://localhost:12000 → `davidshaevel-website` namespace
 - Hubble CLI (optional):
@@ -977,6 +990,9 @@ Open in separate tabs/terminals:
 ```bash
 # Port-forward hubble-relay (if not already running)
 kubectl port-forward -n kube-system svc/hubble-relay 4245:443 &
+
+# Port-forward Hubble UI (if not already running)
+kubectl port-forward -n kube-system svc/hubble-ui 12000:80 &
 
 # Observe flows with mTLS
 hubble observe --namespace davidshaevel-website --follow \
@@ -986,7 +1002,7 @@ hubble observe --namespace davidshaevel-website --follow \
   --tls-server-name "*.hubble-relay.cilium.io"
 ```
 
-**Step 2: Verify baseline**
+**Step 2: Verify AKS baseline**
 
 Note the normal state: backend pods are healthy, backend→database:5432 flows show FORWARDED in Hubble, no restarts in Grafana.
 
@@ -995,7 +1011,7 @@ kubectl get pods -n davidshaevel-website
 # Expected: frontend, backend, database all Running/Ready
 ```
 
-**Step 3: Apply a blocking policy**
+**Step 3: Apply blocking policy (CiliumNetworkPolicy on AKS)**
 
 Create a CiliumNetworkPolicy that restricts database ingress to only database→database, blocking backend→database:
 
@@ -1017,7 +1033,7 @@ spec:
 EOF
 ```
 
-**Step 4: Observe the failure**
+**Step 4: Observe the failure (AKS)**
 
 ```bash
 # Watch pods — expect backend to start failing health checks and restarting
@@ -1034,7 +1050,7 @@ hubble observe --namespace davidshaevel-website --verdict DROPPED \
 In Grafana: watch for pod restart count increasing on the backend.
 In Hubble UI: red lines (dropped flows) from backend to database.
 
-**Step 5: Troubleshoot (practice narrating)**
+**Step 5: Troubleshoot AKS (practice narrating)**
 
 ```bash
 # "I can see the backend pod is restarting. Let me check its logs."
@@ -1053,13 +1069,13 @@ kubectl describe ciliumnetworkpolicy block-backend-to-database -n davidshaevel-w
 # Backend traffic to port 5432 is being denied. Let me remove this policy."
 ```
 
-**Step 6: Fix by removing the blocking policy**
+**Step 6: Fix AKS by removing the blocking policy**
 
 ```bash
 kubectl delete ciliumnetworkpolicy block-backend-to-database -n davidshaevel-website
 ```
 
-**Step 7: Verify recovery**
+**Step 7: Verify AKS recovery**
 
 ```bash
 # Watch pods recover
@@ -1074,6 +1090,111 @@ hubble observe --namespace davidshaevel-website --verdict FORWARDED \
 ```
 
 In Grafana: confirm backend pod restarts stabilize, CPU/memory return to baseline.
+
+---
+
+### Part B: GKE Incident
+
+**Step 8: Switch to GKE context**
+
+```bash
+gcloud container clusters get-credentials k8s-developer-platform-gke \
+  --zone us-central1-a --project <project-id>
+```
+
+**Step 9: Verify GKE baseline**
+
+```bash
+kubectl get pods -n davidshaevel-website
+# Expected: frontend, backend, database all Running/Ready
+
+# Confirm normal flows
+kubectl exec -it -n gke-managed-dpv2-observability \
+  deployment/hubble-relay -c hubble-cli -- \
+  hubble observe --namespace davidshaevel-website --last 10
+```
+
+**Step 10: Apply blocking policy (Kubernetes NetworkPolicy on GKE)**
+
+GKE Standard doesn't have CiliumNetworkPolicy CRDs — use standard Kubernetes NetworkPolicy instead. Same effect, different API:
+
+```bash
+cat <<'EOF' | kubectl apply -f -
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: block-backend-to-database
+  namespace: davidshaevel-website
+spec:
+  podSelector:
+    matchLabels:
+      component: database
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              component: database
+EOF
+```
+
+**Step 11: Observe the failure (GKE)**
+
+```bash
+# Watch pods — expect backend to start failing health checks and restarting
+kubectl get pods -n davidshaevel-website -w
+
+# Check Hubble flows — look for DROPPED packets on port 5432
+kubectl exec -it -n gke-managed-dpv2-observability \
+  deployment/hubble-relay -c hubble-cli -- \
+  hubble observe --namespace davidshaevel-website --verdict DROPPED
+```
+
+In GCP Console: Observability → Traffic flows → check the "Number of egress flows, drop reasons" chart (should now show data).
+
+**Step 12: Troubleshoot GKE (practice narrating)**
+
+```bash
+# "Backend is restarting on GKE. Let me check logs."
+kubectl logs -n davidshaevel-website -l component=backend --tail=20
+
+# "Same pattern — connection refused to database. Let me check Hubble."
+# (Hubble shows DROPPED on port 5432)
+
+# "On GKE we use standard NetworkPolicy, not CiliumNetworkPolicy."
+kubectl get networkpolicies -n davidshaevel-website
+
+# "There's a block-backend-to-database NetworkPolicy. Let me inspect it."
+kubectl describe networkpolicy block-backend-to-database -n davidshaevel-website
+
+# "Same issue — database ingress restricted to database pods only.
+# Backend can't reach port 5432. Removing the policy."
+```
+
+**Step 13: Fix GKE by removing the blocking policy**
+
+```bash
+kubectl delete networkpolicy block-backend-to-database -n davidshaevel-website
+```
+
+**Step 14: Verify GKE recovery**
+
+```bash
+# Watch pods recover
+kubectl get pods -n davidshaevel-website -w
+
+# Hubble flows should show FORWARDED packets to database again
+kubectl exec -it -n gke-managed-dpv2-observability \
+  deployment/hubble-relay -c hubble-cli -- \
+  hubble observe --namespace davidshaevel-website --verdict FORWARDED
+```
+
+In GCP Console: drop reasons chart should return to zero.
+
+---
+
+### Interview Talking Point
+
+**Cross-cloud incident response:** "I simulated the same network incident on both clusters — blocking backend→database traffic. On AKS, I used a CiliumNetworkPolicy and diagnosed it with the Hubble CLI over mTLS, the Hubble UI service map showing red drop lines, and the Cilium Agent Metrics dashboard in Grafana. On GKE, I used a standard Kubernetes NetworkPolicy and diagnosed it by exec'ing into the managed Hubble relay pod and checking the GCP Console traffic flows. The debugging workflow was identical — see restarts, check Hubble for drops, find the bad policy, remove it — but the tools and policy APIs differed. That's the operational reality of multi-cloud: same concepts, different implementations."
 
 No commit needed — this was a live simulation, not a persisted change.
 
