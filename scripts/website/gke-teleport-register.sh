@@ -22,12 +22,21 @@ if ! helm status teleport-agent -n "${TELEPORT_NAMESPACE}" >/dev/null 2>&1; then
     exit 1
 fi
 
-# Verify website frontend is running on GKE.
-if ! kubectl get svc frontend -n "${WEBSITE_NAMESPACE}" >/dev/null 2>&1; then
-    echo "Error: Website frontend service not found on GKE in namespace '${WEBSITE_NAMESPACE}'."
-    echo "Wait for Argo CD to sync the GKE application."
-    exit 1
-fi
+# Wait for Argo CD to sync the website to GKE.
+echo "Waiting for website frontend service on GKE (Argo CD sync may take a few minutes)..."
+WAIT_SECONDS=0
+MAX_WAIT=300
+while ! kubectl get svc frontend -n "${WEBSITE_NAMESPACE}" >/dev/null 2>&1; do
+    if [ "${WAIT_SECONDS}" -ge "${MAX_WAIT}" ]; then
+        echo "Error: Website frontend service not found after ${MAX_WAIT}s."
+        echo "Check Argo CD sync status for the davidshaevel-website-gke application."
+        exit 1
+    fi
+    sleep 15
+    WAIT_SECONDS=$((WAIT_SECONDS + 15))
+    echo "  Waiting... (${WAIT_SECONDS}s)"
+done
+echo "Website frontend service found on GKE."
 
 # Get the current chart version to match.
 TELEPORT_VERSION=$(helm list -n "${TELEPORT_NAMESPACE}" -o json | jq -r '.[] | select(.name=="teleport-agent") | .app_version')
