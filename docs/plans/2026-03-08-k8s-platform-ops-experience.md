@@ -887,11 +887,15 @@ Document which dashboards are most useful, what ACNS provides, and what gaps exi
 
 ## Task 8: Simulate Application-Level Incident
 
-**Goal:** Push a bad config via Argo CD, observe the failure in Grafana, troubleshoot, and roll back.
+**Goal:** Push a bad config via Argo CD, observe the failure, troubleshoot, and roll back — practicing the narration and triage flow an SRE would follow in production.
 
-**Step 1: Observe baseline in Grafana**
+**Real-world context:** In production, you wouldn't be watching `kubectl get pods` when an incident starts. The first signal would come from **alerting** — Argo CD notifications (Slack/webhook when an app goes Degraded), Prometheus alerting rules (`KubePodNotReady`, `KubePodCrashLooping`), or Alertmanager routing to PagerDuty. This platform has monitoring but not alerting configured, so we simulate the "alert received" moment by watching Argo CD status change to Degraded.
 
-Open the "Kubernetes / Compute Resources / Namespace (Pods)" dashboard filtered to `davidshaevel-website`. Note the normal state: 2 pods, stable CPU/memory, no restarts.
+**Step 1: Observe baseline**
+
+Open in separate tabs/terminals:
+- Grafana: "Kubernetes / Compute Resources / Namespace (Pods)" filtered to `davidshaevel-website` — note stable CPU/memory for all pods
+- Terminal: `kubectl get pods -n davidshaevel-website -w`
 
 **Step 2: Push a bad image tag**
 
@@ -901,7 +905,7 @@ Edit `manifests/davidshaevel-website/frontend.yaml` — change the image tag to 
 image: k8sdevplatformacr.azurecr.io/davidshaevel-website/frontend:does-not-exist
 ```
 
-Commit and push. Argo CD auto-sync will pick this up.
+Commit and push. Argo CD auto-sync will pick this up within ~3 minutes.
 
 ```bash
 git add manifests/davidshaevel-website/frontend.yaml
@@ -913,39 +917,46 @@ git push
 
 **Step 3: Observe the failure**
 
-```bash
-# Watch pods — expect ImagePullBackOff
-kubectl get pods -n davidshaevel-website -w
+In `kubectl get pods -w`: watch for a new pod stuck in `ErrImagePull`/`ImagePullBackOff`. The existing frontend pod keeps running — Kubernetes' rolling update strategy preserves availability by not terminating the old pod until the replacement is ready. This means:
+- **Grafana** won't show significant changes (the running pod is unaffected)
+- **Argo CD** will transition to `Progressing` → `Degraded` + `Synced` (the desired state was applied, but the deployment can't converge)
 
+```bash
 # Check Argo CD application status
 kubectl get applications -n argocd
 ```
 
-In Grafana: watch for pod restart count increasing, new pod stuck in Pending/ImagePullBackOff.
+In production, Argo CD transitioning to **Degraded** is where the alert would fire and page the on-call SRE.
 
 **Step 4: Troubleshoot (practice narrating)**
 
-Narrate out loud as if interviewers are watching:
+Narrate out loud as if you've just been paged and are triaging:
 
 ```bash
-# "I can see the pod is in ImagePullBackOff. Let me check the events."
+# "I received an alert that davidshaevel-website-aks is Degraded in Argo CD.
+# Let me check the pod status to understand what's happening."
+kubectl get pods -n davidshaevel-website
+
+# "I see a new frontend pod in ImagePullBackOff. The old pod is still running,
+# so the site is still up. Let me check the events for details."
 kubectl describe pod -n davidshaevel-website -l component=frontend
 
-# "The error shows the image tag doesn't exist in ACR. Let me verify."
+# "The events show it can't pull the image tag 'does-not-exist' from ACR.
+# Let me verify what tags are actually available."
 az acr repository show-tags --name k8sdevplatformacr --repository davidshaevel-website/frontend
 
-# "I can see the available tags. The deployment has a typo. Let me check
-# the Argo CD application to see what changed."
-kubectl get application davidshaevel-website -n argocd -o yaml | grep -A5 "status:"
+# "The valid tag is 'b80f6d5'. Someone pushed a bad image reference.
+# The site is still up thanks to the rolling update strategy, so this isn't
+# customer-impacting yet. Let me fix the image tag in Git and push."
 ```
 
-**Step 5: Roll back via Argo CD**
+**Step 5: Fix and recover via GitOps**
 
-Fix the image tag back to the correct value. Commit and push.
+Fix the image tag back to the correct value. In a GitOps workflow, the fix goes through Git — not `kubectl edit` or `kubectl set image`.
 
 ```bash
-# Fix the image tag
-# Edit manifests/davidshaevel-website/frontend.yaml back to correct tag
+# Fix the image tag in the manifest
+# Edit manifests/davidshaevel-website/frontend.yaml back to correct tag (b80f6d5)
 git add manifests/davidshaevel-website/frontend.yaml
 git commit -m "fix(website): restore correct image tag after incident simulation
 
@@ -953,11 +964,19 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
 git push
 ```
 
-Watch Argo CD auto-sync and pods recover.
+Watch Argo CD auto-sync and the bad pod get replaced. The old frontend pod continues serving traffic throughout — zero downtime.
 
-**Step 6: Verify recovery in Grafana**
+**Step 6: Verify recovery**
 
-Confirm pods are back to Running, restarts stabilized, metrics normal.
+```bash
+# Confirm all pods are Running with no restarts
+kubectl get pods -n davidshaevel-website
+
+# Confirm Argo CD shows Synced + Healthy
+kubectl get applications -n argocd
+```
+
+In Grafana, metrics should remain stable throughout — this incident type doesn't cause resource spikes because availability was never interrupted.
 
 ---
 
