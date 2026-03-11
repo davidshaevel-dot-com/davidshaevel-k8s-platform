@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: k8sdevplatformacr.azurecr.io/davidshaevel-website/frontend:does-not-exist
+          image: k8sdevplatformacr.azurecr.io/davidshaevel-website/frontend:b80f6d5
           ports:
             - containerPort: 3000
           livenessProbe:
