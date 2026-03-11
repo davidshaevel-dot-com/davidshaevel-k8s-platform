@@ -13,6 +13,8 @@ A multi-cloud Kubernetes developer platform following the [Build Your First Kube
 - **Platform Management:** Portainer Business Edition (BE)
 - **Secure Access:** Teleport Community Edition (self-hosted)
 - **GitOps:** Argo CD (declarative deployments from Git)
+- **Monitoring:** kube-prometheus-stack (Prometheus + Grafana)
+- **Network Observability:** Hubble — ACNS (AKS), Dataplane V2 (GKE)
 - **CI/CD:** GitHub Actions (workflow_dispatch)
 - **IaC:** Azure CLI, gcloud CLI, Helm
 - **DNS:** Cloudflare (API-managed)
@@ -78,7 +80,7 @@ AKS Cluster (k8s-developer-platform-rg, eastus)
     |
     +-- (future namespaces: Crossplane)
 
-GKE Cluster (us-central1-a)
+GKE Cluster (us-central1-a) — Dataplane V2 (Cilium-based)
     |
     +-- davidshaevel-website namespace
     |       |
@@ -91,8 +93,11 @@ GKE Cluster (us-central1-a)
     |               (loadBalancerSourceRanges: AKS egress IP only)
     |
     +-- teleport-cluster namespace
-            +-- Teleport Kube Agent (kubectl access via Teleport)
-            +-- Website App (davidshaevel-website-gke via Teleport)
+    |       +-- Teleport Kube Agent (kubectl access via Teleport)
+    |       +-- Website App (davidshaevel-website-gke via Teleport)
+    |
+    +-- gke-managed-dpv2-observability namespace (GKE-managed)
+            +-- Hubble Relay (network flow observability, no UI on GKE Standard)
 ```
 
 All traffic flows through Teleport. Portainer has no public endpoint. The GKE Portainer Agent LoadBalancer is restricted to the AKS cluster's egress IP via `loadBalancerSourceRanges`.
@@ -266,6 +271,8 @@ davidshaevel-k8s-platform/
 |   |   +-- portainer/                 # Portainer server + agent install/uninstall
 |   |   +-- teleport/                  # Teleport server + agent install/uninstall
 |   |   +-- cilium/                    # Cilium/Hubble enable/disable, network policies
+|   |   +-- monitoring/                # kube-prometheus-stack install/uninstall/Teleport
+|   |   +-- website/                   # Website Teleport registration (AKS + GKE)
 |   +-- manifests/                     # Kubernetes manifests (non-Helm)
 |   |   +-- cilium/                    # CiliumNetworkPolicy manifests
 |   +-- helm-values/                   # Helm value overrides per tool
