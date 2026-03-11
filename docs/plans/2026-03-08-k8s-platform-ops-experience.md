@@ -974,7 +974,7 @@ Confirm pods are back to Running, restarts stabilized, metrics normal.
 | **Block with** | CiliumNetworkPolicy | Standard Kubernetes NetworkPolicy |
 | **Diagnose with** | Hubble CLI (mTLS) + Hubble UI + Grafana | Hubble CLI (`kubectl exec`) + GCP Console |
 | **See drops in** | Hubble UI (red lines) + Cilium Agent Metrics dashboard | GCP Console → Observability → Traffic flows |
-| **Fix by** | `kubectl delete cnp` | `kubectl delete networkpolicy` |
+| **Fix by** | Delete blocking CNP + restore `allow-intra-namespace` | Delete blocking NetworkPolicy + restore `allow-intra-namespace` |
 
 ---
 
@@ -988,6 +988,14 @@ Ensure kubectl context is AKS. Open in separate tabs/terminals:
 - Hubble CLI (optional):
 
 ```bash
+# Extract Hubble mTLS certs (files in /tmp may have been cleaned up)
+kubectl get secret hubble-relay-client-certs -n kube-system \
+  -o jsonpath='{.data.ca\.crt}' | base64 -d > /tmp/hubble-ca.crt
+kubectl get secret hubble-relay-client-certs -n kube-system \
+  -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/hubble-client.crt
+kubectl get secret hubble-relay-client-certs -n kube-system \
+  -o jsonpath='{.data.tls\.key}' | base64 -d > /tmp/hubble-client.key
+
 # Port-forward hubble-relay (if not already running)
 kubectl port-forward -n kube-system svc/hubble-relay 4245:443 &
 
@@ -1013,9 +1021,13 @@ kubectl get pods -n davidshaevel-website
 
 **Step 3: Apply blocking policy (CiliumNetworkPolicy on AKS)**
 
-Create a CiliumNetworkPolicy that restricts database ingress to only database→database, blocking backend→database:
+CiliumNetworkPolicies are additive — if *any* policy allows traffic, it flows. The existing `allow-intra-namespace` policy permits all intra-namespace traffic, so a new blocking policy alone won't work. First remove `allow-intra-namespace`, then apply the restrictive policy:
 
 ```bash
+# Remove the allow-all intra-namespace rule
+kubectl delete ciliumnetworkpolicy allow-intra-namespace -n davidshaevel-website
+
+# Apply a policy that only allows database→database, blocking backend→database
 cat <<'EOF' | kubectl apply -f -
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
@@ -1031,6 +1043,10 @@ spec:
         - matchLabels:
             component: database
 EOF
+
+# Restart backend to force new database connections (existing connections persist
+# through policy changes — TypeORM keeps a connection pool alive)
+kubectl rollout restart deployment/backend -n davidshaevel-website
 ```
 
 **Step 4: Observe the failure (AKS)**
@@ -1040,15 +1056,16 @@ EOF
 kubectl get pods -n davidshaevel-website -w
 
 # Check Hubble flows — look for DROPPED packets on port 5432
-hubble observe --namespace davidshaevel-website --verdict DROPPED \
+hubble observe --namespace davidshaevel-website --verdict DROPPED --follow \
   --tls --tls-ca-cert-files /tmp/hubble-ca.crt \
   --tls-client-cert-file /tmp/hubble-client.crt \
   --tls-client-key-file /tmp/hubble-client.key \
   --tls-server-name "*.hubble-relay.cilium.io"
 ```
 
-In Grafana: watch for pod restart count increasing on the backend.
+In Grafana ("Kubernetes / Compute Resources / Namespace (Pods)"): watch for backend CPU/memory dropping to zero and spiking as the pod crash-loops.
 In Hubble UI: red lines (dropped flows) from backend to database.
+In terminal: `kubectl get pods -n davidshaevel-website -w` shows the RESTARTS column incrementing.
 
 **Step 5: Troubleshoot AKS (practice narrating)**
 
@@ -1062,24 +1079,34 @@ kubectl logs -n davidshaevel-website -l component=backend --tail=20
 # "There are dropped packets between backend and database. Let me check network policies."
 kubectl get ciliumnetworkpolicies -n davidshaevel-website
 
-# "There's a block-backend-to-database policy. Let me inspect it."
+# "I notice allow-intra-namespace is missing and there's a block-backend-to-database policy."
 kubectl describe ciliumnetworkpolicy block-backend-to-database -n davidshaevel-website
 
-# "This policy is restricting database ingress to only database pods.
-# Backend traffic to port 5432 is being denied. Let me remove this policy."
+# "This policy restricts database ingress to only database pods.
+# Without allow-intra-namespace, backend traffic to port 5432 is denied.
+# I need to remove this restrictive policy and restore the allow-intra-namespace rule."
 ```
 
-**Step 6: Fix AKS by removing the blocking policy**
+**Step 6: Fix AKS by removing the blocking policy and restoring allow-intra-namespace**
 
 ```bash
+# Remove the blocking policy
 kubectl delete ciliumnetworkpolicy block-backend-to-database -n davidshaevel-website
+
+# Restore the allow-intra-namespace policy
+kubectl apply -f manifests/cilium/namespace-isolation.yaml
 ```
 
 **Step 7: Verify AKS recovery**
 
 ```bash
+# If the backend pod is stuck in CrashLoopBackOff with a long backoff timer,
+# restart to clear it (otherwise wait for the next retry)
+kubectl rollout restart deployment/backend -n davidshaevel-website
+
 # Watch pods recover
 kubectl get pods -n davidshaevel-website -w
+# Expected: backend transitions to Running 1/1
 
 # Hubble flows should show FORWARDED packets to database again
 hubble observe --namespace davidshaevel-website --verdict FORWARDED \
@@ -1089,7 +1116,7 @@ hubble observe --namespace davidshaevel-website --verdict FORWARDED \
   --tls-server-name "*.hubble-relay.cilium.io"
 ```
 
-In Grafana: confirm backend pod restarts stabilize, CPU/memory return to baseline.
+In Grafana: confirm backend CPU/memory return to baseline. Note: Prometheus scrapes every 30s, so brief crash-loop cycles may not appear clearly in Grafana — the terminal `kubectl get pods -w` and Hubble CLI are more reliable signals for this scenario.
 
 ---
 
@@ -1098,8 +1125,9 @@ In Grafana: confirm backend pod restarts stabilize, CPU/memory return to baselin
 **Step 8: Switch to GKE context**
 
 ```bash
-gcloud container clusters get-credentials k8s-developer-platform-gke \
-  --zone us-central1-a --project <project-id>
+use-gke
+# Or: gcloud container clusters get-credentials k8s-developer-platform-gke \
+#   --zone us-central1-a --project dev-david-024680
 ```
 
 **Step 9: Verify GKE baseline**
@@ -1116,9 +1144,13 @@ kubectl exec -it -n gke-managed-dpv2-observability \
 
 **Step 10: Apply blocking policy (Kubernetes NetworkPolicy on GKE)**
 
-GKE Standard doesn't have CiliumNetworkPolicy CRDs — use standard Kubernetes NetworkPolicy instead. Same effect, different API:
+GKE Standard doesn't have CiliumNetworkPolicy CRDs — use standard Kubernetes NetworkPolicy instead. Same concept as AKS: NetworkPolicies are additive, so remove `allow-intra-namespace` first:
 
 ```bash
+# Remove the allow-all intra-namespace rule
+kubectl delete networkpolicy allow-intra-namespace -n davidshaevel-website
+
+# Apply a policy that only allows database→database, blocking backend→database
 cat <<'EOF' | kubectl apply -f -
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -1135,6 +1167,9 @@ spec:
             matchLabels:
               component: database
 EOF
+
+# Restart backend to force new database connections
+kubectl rollout restart deployment/backend -n davidshaevel-website
 ```
 
 **Step 11: Observe the failure (GKE)**
@@ -1146,7 +1181,7 @@ kubectl get pods -n davidshaevel-website -w
 # Check Hubble flows — look for DROPPED packets on port 5432
 kubectl exec -it -n gke-managed-dpv2-observability \
   deployment/hubble-relay -c hubble-cli -- \
-  hubble observe --namespace davidshaevel-website --verdict DROPPED
+  hubble observe --namespace davidshaevel-website --verdict DROPPED --follow
 ```
 
 In GCP Console: Observability → Traffic flows → check the "Number of egress flows, drop reasons" chart (should now show data).
@@ -1163,24 +1198,34 @@ kubectl logs -n davidshaevel-website -l component=backend --tail=20
 # "On GKE we use standard NetworkPolicy, not CiliumNetworkPolicy."
 kubectl get networkpolicies -n davidshaevel-website
 
-# "There's a block-backend-to-database NetworkPolicy. Let me inspect it."
+# "I notice allow-intra-namespace is missing and there's a block-backend-to-database policy."
 kubectl describe networkpolicy block-backend-to-database -n davidshaevel-website
 
-# "Same issue — database ingress restricted to database pods only.
-# Backend can't reach port 5432. Removing the policy."
+# "Same issue as AKS — database ingress restricted to database pods only.
+# Without allow-intra-namespace, backend can't reach port 5432.
+# I need to remove this restrictive policy and restore allow-intra-namespace."
 ```
 
-**Step 13: Fix GKE by removing the blocking policy**
+**Step 13: Fix GKE by removing the blocking policy and restoring allow-intra-namespace**
 
 ```bash
+# Remove the blocking policy
 kubectl delete networkpolicy block-backend-to-database -n davidshaevel-website
+
+# Restore the GKE network policies
+kubectl apply -f manifests/cilium/gke-namespace-isolation.yaml
 ```
 
 **Step 14: Verify GKE recovery**
 
 ```bash
+# If the backend pod is stuck in CrashLoopBackOff with a long backoff timer,
+# restart to clear it
+kubectl rollout restart deployment/backend -n davidshaevel-website
+
 # Watch pods recover
 kubectl get pods -n davidshaevel-website -w
+# Expected: backend transitions to Running 1/1
 
 # Hubble flows should show FORWARDED packets to database again
 kubectl exec -it -n gke-managed-dpv2-observability \
