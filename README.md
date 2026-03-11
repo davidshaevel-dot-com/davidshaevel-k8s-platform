@@ -70,7 +70,7 @@ All traffic flows through Teleport — no services have direct public endpoints 
 | Secure Access | Teleport Community Edition (self-hosted, zero-trust) |
 | GitOps | Argo CD (single control plane, multi-cluster) |
 | Monitoring | kube-prometheus-stack (Prometheus + Grafana) |
-| Network Observability | Hubble (ACNS) — flow logs, service map, metrics |
+| Network Observability | Hubble — ACNS (AKS), Dataplane V2 (GKE) |
 | CI/CD | GitHub Actions (workflow_dispatch) |
 | DNS | Cloudflare (API-managed) |
 | TLS | Let's Encrypt (ACME via Teleport) |
@@ -96,7 +96,7 @@ All workflows are triggered manually via `workflow_dispatch` from the GitHub Act
 
 ### Setting Up GitHub Repository Secrets
 
-The workflows require an Azure service principal, a GCP service account, and 8 GitHub repository secrets. Helper scripts automate the entire setup.
+The workflows require an Azure service principal, a GCP service account, and 10 GitHub repository secrets. Helper scripts automate the entire setup.
 
 First, ensure `.envrc` is configured with all required variables (see [.envrc.example](.envrc.example)):
 
@@ -144,6 +144,8 @@ Then run the setup scripts:
 | `CLOUDFLARE_ZONE_ID` | Cloudflare zone ID | `.envrc` |
 | `TELEPORT_ACME_EMAIL` | Email for Let's Encrypt certificates | `.envrc` |
 | `PORTAINER_ADMIN_PASSWORD` | Portainer admin password for API automation | `.envrc` |
+| `ACR_SP_APP_ID` | Service principal app ID for GKE→ACR image pull | `.envrc` |
+| `ACR_SP_PASSWORD` | Service principal password for GKE→ACR image pull | `.envrc` |
 
 ## Prerequisites
 
