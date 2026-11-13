@@ -16,6 +16,12 @@ env:
   ACR_SP_APP_ID: ${{ secrets.ACR_SP_APP_ID }}
   ACR_SP_PASSWORD: ${{ secrets.ACR_SP_PASSWORD }}
   TELEPORT_DOMAIN: teleport.davidshaevel.com
+  # Make `gcloud container clusters get-credentials` write
+  # --use_application_default_credentials into the kubeconfig, so
+  # gke-gcloud-auth-plugin reads GOOGLE_APPLICATION_CREDENTIALS (exported by
+  # google-github-actions/auth) instead of shelling out to
+  # `gcloud config config-helper`, which crashes on current gcloud (TT-813).
+  CLOUDSDK_CONTAINER_USE_APPLICATION_DEFAULT_CREDENTIALS: "true"
 
 jobs:
   start-gke:
@@ -38,6 +44,11 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
         with:
           install_components: 'gke-gcloud-auth-plugin'
+
+      - name: Print gcloud Version
+        run: |
+          gcloud version
+          gke-gcloud-auth-plugin --version || true
 
       - name: Setup kubectl
         uses: azure/setup-kubectl@v4
