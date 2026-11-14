@@ -146,3 +146,47 @@ Since GKE clusters are fully deleted on stop and recreated on start, there is no
 See `manifests/cilium/namespace-isolation.yaml` (AKS) vs `manifests/cilium/gke-namespace-isolation.yaml` (GKE).
 
 **First encountered:** 2026-03-09, during GKE multi-cloud deployment (TT-263).
+
+---
+
+## Teleport Name Returns NXDOMAIN After AKS Start
+
+**Symptom:** AKS Start finishes green, but `teleport.davidshaevel.com` does not resolve on the local network. Chrome shows `DNS_PROBE_FINISHED_NXDOMAIN` and `dig +short teleport.davidshaevel.com` prints nothing. Meanwhile the workflow's "Update Cloudflare DNS", "Wait for DNS Propagation" and "Verify Teleport" steps all passed, and the Cloudflare dashboard shows both A records (`teleport` and `*.teleport`).
+
+**Error message:**
+> DNS_PROBE_FINISHED_NXDOMAIN
+
+**Root cause:** A resolver on the local network cached a negative ("no such name") answer from a lookup made while the cluster was stopped. On 2026-11-13 that resolver was the home router. AKS Stop deletes the Teleport DNS records (`delete_dns` defaults to `true`), so any lookup while the cluster is stopped gets NXDOMAIN. The resolver can keep that answer for up to the zone's negative-caching time of 1,800 seconds (30 minutes). The workflow's "Verify Teleport" step still passes because it runs on the GitHub runner, which does not use your network's cache. The cause was confirmed when the cached answer expired and the page loaded.
+
+**Verification:** Three checks tell the two sides apart. A stale local cache gives these results; a missing record does not.
+
+1. The local lookup returns nothing:
+
+   ```bash
+   dig +short teleport.davidshaevel.com
+   ```
+
+2. Ask the router directly:
+
+   ```bash
+   dig teleport.davidshaevel.com @<router address> +noall +comments +authority
+   ```
+
+   A cached negative answer shows `status: NXDOMAIN` and the zone's SOA line, with a TTL that counts down each time you run the command. That TTL is the time left on the cached answer. On 2026-11-13 it read 269 seconds at 12:58:23, and the page loaded at 13:03.
+
+3. Look the name up over DNS-over-HTTPS, which skips the local cache:
+
+   ```bash
+   curl -s -H 'accept: application/dns-json' \
+       'https://cloudflare-dns.com/dns-query?name=teleport.davidshaevel.com&type=A'
+   ```
+
+   If this returns the A record, the record exists and only the local cache is wrong.
+
+On the network where this happened, even `dig` aimed at public resolvers was answered locally, so pointing `dig` at a public resolver did not get past the cache. Only the DNS-over-HTTPS query did.
+
+**Fix:** Wait for the SOA TTL from check 2 to reach zero (at most 1,800 seconds), then retry. Using another network, such as a phone on cellular, should also work, but it was not tried.
+
+**Prevention:** Do not look up `teleport.davidshaevel.com`, or open it in a browser, while the cluster is stopped. Not tested: the browser's secure-DNS setting.
+
+**First encountered:** 2026-11-13. The name returned NXDOMAIN on the home network from 12:52 to 13:03 CST, after an AKS Start that finished at 12:51. See [Teleport Access](teleport-access.md) for the full access walkthrough.
