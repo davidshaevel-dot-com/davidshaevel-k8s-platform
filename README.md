@@ -58,6 +58,8 @@ GKE Cluster (us-central1-a) — ephemeral secondary
 
 All traffic flows through Teleport — no services have direct public endpoints except the Teleport proxy. One Argo CD instance on AKS manages both clusters. GKE is fully ephemeral: when deleted and recreated, Argo CD auto-syncs everything back.
 
+To reach the clusters through Teleport from your own machine (browser sign-in, `tsh login`, `kubectl` on AKS and GKE), follow [Teleport Access](docs/reference/teleport-access.md).
+
 ## Tech Stack
 
 | Layer | Technology |
