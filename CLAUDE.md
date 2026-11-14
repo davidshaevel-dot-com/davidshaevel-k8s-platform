@@ -188,7 +188,7 @@ kubectl get appprojects -n argocd          # List Argo CD projects
 kubectl get pods -n argocd                 # Check Argo CD pods
 kubectl get svc -n argocd                  # Check Argo CD services
 
-# Teleport client (tsh) - requires tsh installed locally
+# Teleport client (tsh) - install and full walkthrough: docs/reference/teleport-access.md
 tsh login --proxy=<TELEPORT_DOMAIN> --user=admin
 tsh kube ls                       # List available kube clusters
 tsh kube login k8s-developer-platform-aks  # Switch kubectl to AKS via Teleport
