@@ -16,6 +16,7 @@ Follow the steps in order. Each one only uses tools, files and logins that earli
 - **Permission to run this repo's GitHub Actions workflows.** AKS Start and GKE Start are manual workflows. You can run them from the GitHub website or the GitHub mobile app.
 - **The Teleport `admin` user's password, and the authenticator app that holds its second factor.** The server requires a second factor on every sign-in.
 - **A browser.** The walk used Chrome.
+- **The Azure CLI (`az`), signed in to the subscription that holds the AKS cluster.** You need it only for the account reset in [step 10](#10-reset-a-login-that-no-longer-works). The 2026-11-13 walk did not use it.
 
 ---
 
