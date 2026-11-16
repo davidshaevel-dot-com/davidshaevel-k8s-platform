@@ -74,14 +74,50 @@ Key metric families:
 
 Hubble provides real-time, packet-level visibility into network flows across the cluster. It operates at the eBPF datapath layer inside Cilium, capturing every connection with source/destination identity, verdict (forwarded or dropped), and TCP flags.
 
-### Prerequisites
+Walked 2026-11-13 / 2026-11-14: the health checks and direct-agent commands below, and the AKS UI port-forward. Other Cilium / Hubble commands and flags retained on this page are **not walked** against these recorded facts; historical flow examples and access claims are not re-checked.
 
-- Hubble relay running on AKS (enabled via ACNS: `az aks update --enable-acns`)
-- `hubble` CLI v0.13.6 installed (must match ACNS relay version v1.15.0 — newer CLI versions fail with gRPC ALPN mismatch)
-- Port-forward to hubble-relay active
-- mTLS certs extracted from `hubble-relay-client-certs` secret
+### Cilium Health Checks
 
-### Step-by-Step Setup
+Select the matching cluster context before each cluster's commands. AKS runs Cilium 1.17.18 as DaemonSet `cilium`, with the operator, Hubble Relay and Hubble UI; Advanced Container Networking Services (ACNS) is enabled. GKE Dataplane V2 runs Cilium 1.19.4 as DaemonSet `anetd`.
+
+```bash
+# AKS — walked 2026-11-13 / 2026-11-14
+cilium status
+
+# GKE — walked 2026-11-13: OK, 104/104 controllers
+kubectl -n kube-system exec ds/anetd -c cilium-agent -- cilium-dbg status
+```
+
+On GKE, `cilium status` fails with `daemonsets.apps "cilium" not found`; use the agent health check above.
+
+### Ask the Agent Directly
+
+These commands need no certificates and show only one node's flows, not the whole cluster (walked 2026-11-13 / 2026-11-14). Run each pair in its matching cluster context:
+
+```bash
+# AKS
+kubectl -n kube-system exec ds/cilium -c cilium-agent -- hubble status
+kubectl -n kube-system exec ds/cilium -c cilium-agent -- hubble observe
+
+# GKE
+kubectl -n kube-system exec ds/anetd -c cilium-agent -- hubble status
+kubectl -n kube-system exec ds/anetd -c cilium-agent -- hubble observe
+```
+
+A deny-all ingress drop reads `policy-verdict:none INGRESS DENIED` plus `Policy denied DROPPED`.
+
+### AKS Relay Prerequisites — not walked
+
+- Hubble relay running on AKS (ACNS is enabled; the enable command `az aks update --enable-acns` is not walked)
+- Local `hubble` CLI installed; compatibility is **not re-checked against the current relay** (see [version note](#hubble-cli-version-compatibility))
+- Port-forward to hubble-relay active — not walked
+- mTLS certs extracted from `hubble-relay-client-certs` secret — not walked
+
+The AKS relay requires mutual TLS. A local `hubble` CLI request without the TLS flags was refused with `rpc error ... "error reading server preface: EOF"` (walked 2026-11-13 / 2026-11-14). Success with the documented TLS flags and the local CLI version remain open checks.
+
+### Step-by-Step AKS Relay Setup — not walked
+
+All certificate extraction, relay port-forward and local CLI commands below are retained for the later live check; they are **not walked** against the current relay.
 
 **1. Extract Hubble mTLS certificates**
 
@@ -177,19 +213,19 @@ backend ──→ database:5432         (PostgreSQL queries on startup + health 
 |---------|---------|--------|
 | `FORWARDED` | Traffic allowed and delivered | Normal — healthy traffic |
 | `DROPPED` | Traffic denied | Investigate — check `reason` field for policy deny vs. invalid packet |
-| `POLICY DENIED` | Explicitly blocked by a CiliumNetworkPolicy | Check which policy is blocking — `kubectl get cnp -n <namespace>` |
+| `POLICY DENIED` | Explicitly blocked by a CiliumNetworkPolicy | Check which policy is blocking — `kubectl get cnp -n <namespace>` (not walked) |
 | `ERROR` | Datapath processing error | Check Cilium agent logs |
 
-**Key flags in `--verdict` filter:**
+**Key flags in `--verdict` filter — not walked:**
 
 - `--verdict FORWARDED` — show only allowed traffic
 - `--verdict DROPPED` — show only denied traffic (most useful for debugging)
 
 ### Hubble CLI Version Compatibility
 
-The ACNS-managed Hubble relay on AKS runs an older image (`mcr.microsoft.com/oss/cilium/hubble-relay:v1.15.0`). The standalone `hubble` CLI must be version **v0.13.x** to match. Newer versions (v1.18+) fail with a gRPC ALPN handshake error due to stricter TLS enforcement in grpc-go v1.67+.
+The AKS relay image observed on 2026-11-13 (walked) was `hubble-relay:v1.17.18`. The previous v0.13.x local CLI requirement was written for `hubble-relay:v1.15.0`; that compatibility statement is **not re-checked against the current relay**. Whether the local `hubble` CLI works with the documented TLS flags, and which CLI version it is, remain open checks for a later live run. No current CLI version requirement is established here.
 
-The `cilium` CLI (`cilium hubble` subcommands) does **not** include `hubble observe` — it only wraps management commands (`enable`, `disable`, `port-forward`, `ui`). The standalone `hubble` CLI is required for flow observation.
+The `cilium hubble` management subcommands are `enable`, `disable`, `port-forward` and `ui` (not walked here). Neither `status` nor `observe` is a subcommand; those calls only print help. Use the agent's `hubble status` / `hubble observe` commands above for the walked route, or the local `hubble` CLI relay setup for a later check (not walked).
 
 ### Hubble UI
 
@@ -200,7 +236,8 @@ Hubble UI provides a visual service map of network flows within a namespace. Pod
 **1. Start the port-forward**
 
 ```bash
-kubectl port-forward -n kube-system svc/hubble-ui 12000:80 &
+# AKS — walked 2026-11-13 / 2026-11-14
+kubectl port-forward svc/hubble-ui 12000:80
 ```
 
 **2. Open in browser**
@@ -217,14 +254,16 @@ Navigate to http://localhost:12000
 
 ## GKE Hubble Access (Dataplane V2)
 
-GKE with Dataplane V2 runs Cilium internally and provides Hubble flow observability through the managed `gke-managed-dpv2-observability` namespace. Unlike AKS (where you need mTLS certs and a specific CLI version), GKE provides a `hubble-cli` container built into the relay pod — no local CLI install or certificate extraction needed.
+GKE's Hubble Relay lives in `gke-managed-dpv2-observability` (walked 2026-11-13 / 2026-11-14). For the walked route, use the `ds/anetd` agent commands above; they need no certificates and show one node's flows. The previously documented relay-container route below, including the `hubble-cli` container and its access requirements, is **not walked** against these recorded facts.
 
-### Prerequisites
+### Prerequisites — not walked
 
 - GKE cluster created with `--enable-dataplane-v2`
 - Observability enabled: `--enable-dataplane-v2-flow-observability --enable-dataplane-v2-metrics` (set at creation or via `gcloud container clusters update`)
 
-### Observing Flows
+### Observing Flows — not walked
+
+All commands in this relay-container procedure are **not walked**.
 
 ```bash
 # Get GKE credentials
@@ -270,15 +309,15 @@ All flows show `FORWARDED` — the Kubernetes NetworkPolicies (default-deny + al
 | | AKS (ACNS) | GKE (Dataplane V2) |
 |---|---|---|
 | **Hubble relay location** | `kube-system` namespace | `gke-managed-dpv2-observability` namespace |
-| **CLI access** | Local `hubble` CLI v0.13.x via port-forward | `kubectl exec` into relay pod's `hubble-cli` container |
-| **Authentication** | mTLS certs from `hubble-relay-client-certs` secret | None — exec into the pod directly |
-| **Setup steps** | Extract certs, port-forward, version-match CLI | Just `kubectl exec` |
-| **Hubble UI** | Yes — `kubectl port-forward svc/hubble-ui 12000:80` | No — use GCP Console traffic flows instead |
+| **CLI access** | Agent commands above (walked); local CLI via relay not walked, version compatibility not re-checked | Agent commands above (walked); relay `hubble-cli` container not walked |
+| **Authentication** | Agent route needs no certificates; relay requires mTLS (secret extraction not walked) | Agent route needs no certificates; relay-container route not walked |
+| **Setup steps** | Ask the agent directly; relay setup not walked | Ask the agent directly; relay setup not walked |
+| **Hubble UI** | `kubectl port-forward svc/hubble-ui 12000:80` (walked) | GCP Console alternative not walked |
 | **Network policies** | CiliumNetworkPolicy (identity-aware, L3/L4) | Standard Kubernetes NetworkPolicy (L3/L4) |
 | **Policy enforcement** | Cilium eBPF (managed by Azure) | Cilium eBPF (managed by Google) |
-| **Visual service map** | Hubble UI (localhost:12000) | GCP Console → Observability → Traffic flows |
+| **Visual service map** | Hubble UI (localhost:12000, walked) | GCP Console → Observability → Traffic flows (not walked) |
 
-**Interview talking point — cross-cloud observability:** "Both clusters use Cilium under the hood, but the access patterns differ. On AKS, I use the standalone Hubble CLI with mTLS certificates extracted from a Kubernetes secret — ACNS runs an older relay version so the CLI needs to be version-matched. On GKE, Google bundles a `hubble-cli` container inside the relay pod, so I just `kubectl exec` in — no certs, no version matching. Same Cilium datapath, same flow visibility, different operational experience. Both show the same traffic patterns: kubelet probes, backend→database queries, and policy verdicts."
+**Interview talking point — cross-cloud observability:** "Both clusters use Cilium. I can ask one node's agent directly for Hubble status and flows without certificates: `ds/cilium` on AKS and `ds/anetd` on GKE. This sees only that node's flows. AKS relay access requires mTLS; local CLI compatibility with the observed `hubble-relay:v1.17.18` has not been re-checked. GKE's relay is in `gke-managed-dpv2-observability`; the relay-container procedure is not walked."
 
 ## Interview Talking Points
 
@@ -294,11 +333,11 @@ All flows show `FORWARDED` — the Kubernetes NetworkPolicies (default-deny + al
 
 **What Hubble gives you:** "Hubble is the observability layer built into Cilium. It captures every network flow at the eBPF datapath level — source pod, destination pod, port, protocol, and the policy verdict. It's like tcpdump but identity-aware: instead of just IP addresses, you see Kubernetes pod names and Cilium security identities."
 
-**Debugging workflow:** "When I'm troubleshooting a connectivity issue, my first step is `hubble observe --namespace <ns> --verdict DROPPED`. This immediately shows me which packets are being denied and why — whether it's a missing network policy, a wrong port, or traffic coming from an unexpected namespace. I can see the exact source and destination pods, the TCP flags, and the policy verdict in real time."
+**Debugging workflow — not walked:** "When I'm troubleshooting a connectivity issue, my first step is `hubble observe --namespace <ns> --verdict DROPPED`. This immediately shows me which packets are being denied and why — whether it's a missing network policy, a wrong port, or traffic coming from an unexpected namespace. I can see the exact source and destination pods, the TCP flags, and the policy verdict in real time."
 
 **Practical example:** "In our davidshaevel-website namespace, I can watch the full request lifecycle: kubelet health probes hitting the frontend on port 3000, backend querying PostgreSQL on port 5432, and Teleport routing external requests through the allow-from-teleport CiliumNetworkPolicy. Each flow shows `policy-verdict:L3-Only INGRESS ALLOWED`, which confirms the network policies are working as designed."
 
-**mTLS and ACNS nuance:** "One thing I learned is that Azure's ACNS configures Hubble relay with mutual TLS using internally-managed certificates. To connect from outside the cluster, I extract the client certs from the `hubble-relay-client-certs` Kubernetes secret. The Hubble CLI also needs to be version-matched to the relay — ACNS runs v1.15.0, so I use the v0.13.x CLI. Newer versions fail due to a gRPC ALPN enforcement change."
+**mTLS and ACNS nuance:** "The AKS relay requires mutual TLS: a local Hubble CLI request without TLS flags failed with `error reading server preface: EOF`. The relay image observed on 2026-11-13 (walked) was `hubble-relay:v1.17.18`. The earlier v0.13.x requirement was written for v1.15.0 and is not re-checked against the current relay. Certificate extraction and success with the documented TLS flags remain not walked."
 
 **Metrics vs. flows:** "Grafana dashboards give me the aggregate picture — packet rates, drop trends, policy enforcement status over time. Hubble gives me the per-packet detail when I need to drill down. They're complementary: I spot anomalies in Grafana, then investigate the specific flows in Hubble."
 
@@ -332,9 +371,9 @@ All flows show `FORWARDED` — the Kubernetes NetworkPolicies (default-deny + al
 | Gap | Impact | Workaround |
 |-----|--------|------------|
 | No Hubble metrics export to Prometheus | Cilium Policy Verdicts dashboard (18015) has no data — `hubble_policy_verdicts_total` is not scraped | Use Hubble CLI/UI for per-flow policy verdicts instead |
-| ACNS runs old Hubble relay (v1.15.0) | Newer hubble CLI (v1.18+) fails with gRPC ALPN error | Pin hubble CLI to v0.13.x |
+| AKS relay observed as `hubble-relay:v1.17.18` (walked 2026-11-13) | Previous v0.13.x requirement was written for v1.15.0; compatibility not re-checked against the current relay | Use the walked agent route; later check local CLI version and relay access with TLS flags |
 | No built-in Cilium Grafana dashboards | Must import community dashboards manually and fix datasource references | Imported IDs 16611 and 18015, added `k8s_app` metricRelabeling |
 | No ServiceMonitor for Cilium by default | Prometheus doesn't scrape Cilium metrics out of the box | Created PodMonitor in `manifests/monitoring/cilium-podmonitor.yaml` |
 | Azure Monitor profile not configured | No Azure-native metrics integration | Using self-managed kube-prometheus-stack instead |
-| Hubble UI is per-cluster only | GKE services don't appear in AKS Hubble UI | GKE has its own Hubble via Dataplane V2 (`kubectl exec` into relay pod) |
+| Hubble UI is per-cluster only | GKE services don't appear in AKS Hubble UI | GKE agent route above is walked; `kubectl exec` into relay pod is not walked |
 | GKE lacks CiliumNetworkPolicy CRDs | Can't use identity-aware policies on GKE without GKE Enterprise | Standard Kubernetes NetworkPolicy with `namespaceSelector` instead |
