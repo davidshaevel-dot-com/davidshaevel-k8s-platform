@@ -74,7 +74,7 @@ Key metric families:
 
 Hubble provides real-time, packet-level visibility into network flows across the cluster. It operates at the eBPF datapath layer inside Cilium, capturing every connection with source/destination identity, verdict (forwarded or dropped), and TCP flags.
 
-Walked 2026-11-13 / 2026-11-14: the health checks and direct-agent commands below, and the AKS UI port-forward. The AKS relay port-forward, status and observe commands below are walked 2026-11-16. Other Cilium / Hubble commands and flags retained on this page are **not walked** against these recorded facts; historical flow examples and access claims are not re-checked.
+Walked 2026-11-13 / 2026-11-14: the health checks and direct-agent commands below, and the AKS UI port-forward. The AKS relay port-forward, status and `--last 20` query below are walked 2026-11-16; the `--verdict DROPPED` and `--follow` variants are not walked. Other Cilium / Hubble commands and flags retained on this page are **not walked** against these recorded facts; historical flow examples and access claims are not re-checked.
 
 ### Cilium Health Checks
 
@@ -117,7 +117,7 @@ The AKS relay requires mutual TLS. A local `hubble` CLI request without the TLS 
 
 ### Step-by-Step AKS Relay Setup
 
-The relay port-forward, status and observe commands below are walked 2026-11-16 with local CLI 1.20.4 and the five TLS flags shown. Certificate files from an earlier extraction were used; extraction itself was **not walked** that day.
+The relay port-forward, status and `--last 20` query below are walked 2026-11-16 with local CLI 1.20.4 and the five TLS flags shown; the `--verdict DROPPED` and `--follow` variants are not walked. Certificate files from an earlier extraction were used; extraction itself was **not walked** that day.
 
 **1. Extract Hubble mTLS certificates — not walked**
 
@@ -152,26 +152,26 @@ hubble status \
 
 Result: `Healthcheck (via localhost:4245): Ok`, `Connected Nodes: 1/1`.
 
-**4. Observe flows — walked 2026-11-16**
+**4. Observe flows — only the `--last 20` query walked 2026-11-16**
 
 The recent-flow query with default output failed with `Error "invalid fieldmask" on 1 nodes`. Adding `--use-default-field-masks=false` returned compact one-line-per-flow output; using `-o jsonpb` instead returned flows too.
 
 ```bash
-# All recent flows in a namespace
+# All recent flows in a namespace — walked 2026-11-16
 hubble observe --namespace davidshaevel-website --last 20 --use-default-field-masks=false \
   --tls --tls-ca-cert-files /tmp/hubble-ca.crt \
   --tls-client-cert-file /tmp/hubble-client.crt \
   --tls-client-key-file /tmp/hubble-client.key \
   --tls-server-name "*.hubble-relay.cilium.io"
 
-# Only dropped packets (policy denies, invalid packets)
+# Only dropped packets (policy denies, invalid packets) — not walked
 hubble observe --namespace davidshaevel-website --verdict DROPPED --use-default-field-masks=false \
   --tls --tls-ca-cert-files /tmp/hubble-ca.crt \
   --tls-client-cert-file /tmp/hubble-client.crt \
   --tls-client-key-file /tmp/hubble-client.key \
   --tls-server-name "*.hubble-relay.cilium.io"
 
-# Live stream (follow mode)
+# Live stream (follow mode) — not walked
 hubble observe --namespace davidshaevel-website --follow --use-default-field-masks=false \
   --tls --tls-ca-cert-files /tmp/hubble-ca.crt \
   --tls-client-cert-file /tmp/hubble-client.crt \
@@ -247,7 +247,7 @@ The CLI help describes `--use-default-field-masks` as: "Request only visible fie
 
 Certificate files from an earlier extraction were used; the extraction step itself was **not walked** on 2026-11-16.
 
-The `cilium hubble` management subcommands are `enable`, `disable`, `port-forward` and `ui` (not walked here). Neither `status` nor `observe` is a subcommand; those calls only print help. Use the agent's `hubble status` / `hubble observe` commands above for the walked route, or the local `hubble` CLI relay commands above (walked 2026-11-16 with CLI 1.20.4).
+The `cilium hubble` management subcommands are `enable`, `disable`, `port-forward` and `ui` (not walked here). Neither `status` nor `observe` is a subcommand; those calls only print help. Use the agent's `hubble status` / `hubble observe` commands above for the walked route, or the local `hubble` CLI relay status and `--last 20` query above (walked 2026-11-16 with CLI 1.20.4; `--verdict DROPPED` and `--follow` variants not walked).
 
 ### Hubble UI
 
@@ -333,7 +333,7 @@ All flows show `FORWARDED` — the Kubernetes NetworkPolicies (default-deny + al
 | **Hubble relay location** | `kube-system` namespace | `gke-managed-dpv2-observability` namespace |
 | **CLI access** | Agent commands above (walked); local CLI 1.20.4 via relay with mTLS (walked 2026-11-16); other CLI versions not walked | Agent commands above (walked); relay `hubble-cli` container not walked |
 | **Authentication** | Agent route needs no certificates; relay requires mTLS (secret extraction not walked) | Agent route needs no certificates; relay-container route not walked |
-| **Relay flow output** | Default output fails with `invalid fieldmask`; use `--use-default-field-masks=false` or `-o jsonpb` (walked 2026-11-16) | Relay-container route not walked |
+| **Relay flow output** | For the `--last 20` query, default output fails with `invalid fieldmask`; use `--use-default-field-masks=false` or `-o jsonpb` (walked 2026-11-16); `--verdict DROPPED` and `--follow` variants not walked | Relay-container route not walked |
 | **Setup steps** | Agent route, or relay port-forward and five TLS flags (walked 2026-11-16); certificate extraction not walked | Ask the agent directly; relay setup not walked |
 | **Hubble UI** | `kubectl port-forward -n kube-system svc/hubble-ui 12000:80` (walked) | GCP Console alternative not walked |
 | **Network policies** | CiliumNetworkPolicy (identity-aware, L3/L4) | Standard Kubernetes NetworkPolicy (L3/L4) |
@@ -394,7 +394,7 @@ All flows show `FORWARDED` — the Kubernetes NetworkPolicies (default-deny + al
 | Gap | Impact | Workaround |
 |-----|--------|------------|
 | No Hubble metrics export to Prometheus | Cilium Policy Verdicts dashboard (18015) has no data — `hubble_policy_verdicts_total` is not scraped | Use Hubble CLI/UI for per-flow policy verdicts instead |
-| AKS relay image `hubble-relay:v1.17.18` (walked 2026-11-13); CLI 1.20.4 connects with mTLS (walked 2026-11-16) | Default flow output fails with `invalid fieldmask`; v0.13.x requirement and gRPC ALPN claim withdrawn; other CLI versions not walked | Use `--use-default-field-masks=false` for compact output or `-o jsonpb` (walked 2026-11-16); certificate extraction not walked |
+| AKS relay image `hubble-relay:v1.17.18` (walked 2026-11-13); CLI 1.20.4 connects with mTLS (walked 2026-11-16) | Default flow output fails with `invalid fieldmask`; v0.13.x requirement and gRPC ALPN claim withdrawn; other CLI versions not walked | For the `--last 20` query, use `--use-default-field-masks=false` for compact output or `-o jsonpb` (walked 2026-11-16); `--verdict DROPPED`, `--follow` and certificate extraction not walked |
 | No built-in Cilium Grafana dashboards | Must import community dashboards manually and fix datasource references | Imported IDs 16611 and 18015, added `k8s_app` metricRelabeling |
 | No ServiceMonitor for Cilium by default | Prometheus doesn't scrape Cilium metrics out of the box | Created PodMonitor in `manifests/monitoring/cilium-podmonitor.yaml` |
 | Azure Monitor profile not configured | No Azure-native metrics integration | Using self-managed kube-prometheus-stack instead |
