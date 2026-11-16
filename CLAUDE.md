@@ -155,7 +155,7 @@ kubectl -n kube-system exec ds/cilium -c cilium-agent -- hubble status   # AKS
 kubectl -n kube-system exec ds/cilium -c cilium-agent -- hubble observe  # AKS
 kubectl -n kube-system exec ds/anetd -c cilium-agent -- hubble status    # GKE
 kubectl -n kube-system exec ds/anetd -c cilium-agent -- hubble observe   # GKE
-kubectl port-forward svc/hubble-ui 12000:80  # AKS UI; open http://localhost:12000
+kubectl port-forward -n kube-system svc/hubble-ui 12000:80  # AKS UI; open http://localhost:12000
 kubectl get pods -n kube-system -l k8s-app=cilium  # not walked
 cilium hubble ui                  # Open Hubble UI via CLI; not walked
 ./scripts/cilium/status.sh        # Full Cilium + Hubble + policy status; not walked

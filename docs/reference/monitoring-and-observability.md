@@ -74,7 +74,7 @@ Key metric families:
 
 Hubble provides real-time, packet-level visibility into network flows across the cluster. It operates at the eBPF datapath layer inside Cilium, capturing every connection with source/destination identity, verdict (forwarded or dropped), and TCP flags.
 
-Walked 2026-11-13 / 2026-11-14: the health checks and direct-agent commands below, and the AKS UI port-forward. Other Cilium / Hubble commands and flags retained on this page are **not walked** against these recorded facts; historical flow examples and access claims are not re-checked.
+Walked 2026-11-13 / 2026-11-14: the health checks and direct-agent commands below, and the AKS UI port-forward. The AKS relay port-forward, status and observe commands below are walked 2026-11-16. Other Cilium / Hubble commands and flags retained on this page are **not walked** against these recorded facts; historical flow examples and access claims are not re-checked.
 
 ### Cilium Health Checks
 
@@ -106,22 +106,22 @@ kubectl -n kube-system exec ds/anetd -c cilium-agent -- hubble observe
 
 A deny-all ingress drop reads `policy-verdict:none INGRESS DENIED` plus `Policy denied DROPPED`.
 
-### AKS Relay Prerequisites — not walked
+### AKS Relay Prerequisites
 
 - Hubble relay running on AKS (ACNS is enabled; the enable command `az aks update --enable-acns` is not walked)
-- Local `hubble` CLI installed; compatibility is **not re-checked against the current relay** (see [version note](#hubble-cli-version-compatibility))
-- Port-forward to hubble-relay active — not walked
+- Local `hubble` CLI 1.20.4 connects with mutual TLS (walked 2026-11-16); flow queries need `--use-default-field-masks=false` for compact output or `-o jsonpb` (see [version note](#hubble-cli-version-compatibility)). Other CLI versions are not walked.
+- Port-forward to hubble-relay active — walked 2026-11-16
 - mTLS certs extracted from `hubble-relay-client-certs` secret — not walked
 
-The AKS relay requires mutual TLS. A local `hubble` CLI request without the TLS flags was refused with `rpc error ... "error reading server preface: EOF"` (walked 2026-11-13 / 2026-11-14). Success with the documented TLS flags and the local CLI version remain open checks.
+The AKS relay requires mutual TLS. A local `hubble` CLI request without the TLS flags was refused with `rpc error ... "error reading server preface: EOF"` (walked 2026-11-13 / 2026-11-14). With the documented five TLS flags, local CLI 1.20.4 connects successfully (walked 2026-11-16). The default flow output fails with `Error "invalid fieldmask" on 1 nodes`; use `--use-default-field-masks=false` for compact output or `-o jsonpb`.
 
-### Step-by-Step AKS Relay Setup — not walked
+### Step-by-Step AKS Relay Setup
 
-All certificate extraction, relay port-forward and local CLI commands below are retained for the later live check; they are **not walked** against the current relay.
+The relay port-forward, status and observe commands below are walked 2026-11-16 with local CLI 1.20.4 and the five TLS flags shown. Certificate files from an earlier extraction were used; extraction itself was **not walked** that day.
 
-**1. Extract Hubble mTLS certificates**
+**1. Extract Hubble mTLS certificates — not walked**
 
-ACNS configures Hubble relay with mutual TLS. Extract the client certs from Kubernetes secrets:
+ACNS configures Hubble relay with mutual TLS. The extraction commands are retained below as **not walked**:
 
 ```bash
 kubectl get secret hubble-relay-client-certs -n kube-system \
@@ -132,31 +132,47 @@ kubectl get secret hubble-relay-client-certs -n kube-system \
   -o jsonpath='{.data.tls\.key}' | base64 -d > /tmp/hubble-client.key
 ```
 
-**2. Start the port-forward to hubble-relay**
+**2. Start the port-forward to hubble-relay — walked 2026-11-16**
+
+Keep this running in a separate terminal for the following commands.
 
 ```bash
-kubectl port-forward -n kube-system svc/hubble-relay 4245:443 &
+kubectl port-forward -n kube-system svc/hubble-relay 4245:443
 ```
 
-**3. Observe flows**
+**3. Check relay status — walked 2026-11-16**
+
+```bash
+hubble status \
+  --tls --tls-ca-cert-files /tmp/hubble-ca.crt \
+  --tls-client-cert-file /tmp/hubble-client.crt \
+  --tls-client-key-file /tmp/hubble-client.key \
+  --tls-server-name "*.hubble-relay.cilium.io"
+```
+
+Result: `Healthcheck (via localhost:4245): Ok`, `Connected Nodes: 1/1`.
+
+**4. Observe flows — walked 2026-11-16**
+
+The recent-flow query with default output failed with `Error "invalid fieldmask" on 1 nodes`. Adding `--use-default-field-masks=false` returned compact one-line-per-flow output; using `-o jsonpb` instead returned flows too.
 
 ```bash
 # All recent flows in a namespace
-hubble observe --namespace davidshaevel-website --last 20 \
+hubble observe --namespace davidshaevel-website --last 20 --use-default-field-masks=false \
   --tls --tls-ca-cert-files /tmp/hubble-ca.crt \
   --tls-client-cert-file /tmp/hubble-client.crt \
   --tls-client-key-file /tmp/hubble-client.key \
   --tls-server-name "*.hubble-relay.cilium.io"
 
 # Only dropped packets (policy denies, invalid packets)
-hubble observe --namespace davidshaevel-website --verdict DROPPED \
+hubble observe --namespace davidshaevel-website --verdict DROPPED --use-default-field-masks=false \
   --tls --tls-ca-cert-files /tmp/hubble-ca.crt \
   --tls-client-cert-file /tmp/hubble-client.crt \
   --tls-client-key-file /tmp/hubble-client.key \
   --tls-server-name "*.hubble-relay.cilium.io"
 
 # Live stream (follow mode)
-hubble observe --namespace davidshaevel-website --follow \
+hubble observe --namespace davidshaevel-website --follow --use-default-field-masks=false \
   --tls --tls-ca-cert-files /tmp/hubble-ca.crt \
   --tls-client-cert-file /tmp/hubble-client.crt \
   --tls-client-key-file /tmp/hubble-client.key \
@@ -223,9 +239,15 @@ backend ──→ database:5432         (PostgreSQL queries on startup + health 
 
 ### Hubble CLI Version Compatibility
 
-The AKS relay image observed on 2026-11-13 (walked) was `hubble-relay:v1.17.18`. The previous v0.13.x local CLI requirement was written for `hubble-relay:v1.15.0`; that compatibility statement is **not re-checked against the current relay**. Whether the local `hubble` CLI works with the documented TLS flags, and which CLI version it is, remain open checks for a later live run. No current CLI version requirement is established here.
+Walked 2026-11-16 with the AKS cluster up: local CLI `hubble 1.20.4 compiled with go1.27.3 on darwin/arm64` connects with mutual TLS to the relay through `kubectl port-forward -n kube-system svc/hubble-relay 4245:443` and the five documented TLS flags. The relay image observed on 2026-11-13 (walked) was `hubble-relay:v1.17.18`. The v0.13.x requirement and the gRPC ALPN claim are withdrawn. Other CLI versions are not walked.
 
-The `cilium hubble` management subcommands are `enable`, `disable`, `port-forward` and `ui` (not walked here). Neither `status` nor `observe` is a subcommand; those calls only print help. Use the agent's `hubble status` / `hubble observe` commands above for the walked route, or the local `hubble` CLI relay setup for a later check (not walked).
+`hubble status` with those TLS flags works: `Healthcheck (via localhost:4245): Ok`, `Connected Nodes: 1/1`. The query `hubble observe --namespace davidshaevel-website --last 20` with those TLS flags and default output fails with `Error "invalid fieldmask" on 1 nodes`. Adding `--use-default-field-masks=false` works and prints compact one-line-per-flow output; using `-o jsonpb` instead also works and returns flows.
+
+The CLI help describes `--use-default-field-masks` as: "Request only visible fields when the output format is compact, tab, or dict. (default true)".
+
+Certificate files from an earlier extraction were used; the extraction step itself was **not walked** on 2026-11-16.
+
+The `cilium hubble` management subcommands are `enable`, `disable`, `port-forward` and `ui` (not walked here). Neither `status` nor `observe` is a subcommand; those calls only print help. Use the agent's `hubble status` / `hubble observe` commands above for the walked route, or the local `hubble` CLI relay commands above (walked 2026-11-16 with CLI 1.20.4).
 
 ### Hubble UI
 
@@ -237,7 +259,7 @@ Hubble UI provides a visual service map of network flows within a namespace. Pod
 
 ```bash
 # AKS — walked 2026-11-13 / 2026-11-14
-kubectl port-forward svc/hubble-ui 12000:80
+kubectl port-forward -n kube-system svc/hubble-ui 12000:80
 ```
 
 **2. Open in browser**
@@ -309,15 +331,16 @@ All flows show `FORWARDED` — the Kubernetes NetworkPolicies (default-deny + al
 | | AKS (ACNS) | GKE (Dataplane V2) |
 |---|---|---|
 | **Hubble relay location** | `kube-system` namespace | `gke-managed-dpv2-observability` namespace |
-| **CLI access** | Agent commands above (walked); local CLI via relay not walked, version compatibility not re-checked | Agent commands above (walked); relay `hubble-cli` container not walked |
+| **CLI access** | Agent commands above (walked); local CLI 1.20.4 via relay with mTLS (walked 2026-11-16); other CLI versions not walked | Agent commands above (walked); relay `hubble-cli` container not walked |
 | **Authentication** | Agent route needs no certificates; relay requires mTLS (secret extraction not walked) | Agent route needs no certificates; relay-container route not walked |
-| **Setup steps** | Ask the agent directly; relay setup not walked | Ask the agent directly; relay setup not walked |
-| **Hubble UI** | `kubectl port-forward svc/hubble-ui 12000:80` (walked) | GCP Console alternative not walked |
+| **Relay flow output** | Default output fails with `invalid fieldmask`; use `--use-default-field-masks=false` or `-o jsonpb` (walked 2026-11-16) | Relay-container route not walked |
+| **Setup steps** | Agent route, or relay port-forward and five TLS flags (walked 2026-11-16); certificate extraction not walked | Ask the agent directly; relay setup not walked |
+| **Hubble UI** | `kubectl port-forward -n kube-system svc/hubble-ui 12000:80` (walked) | GCP Console alternative not walked |
 | **Network policies** | CiliumNetworkPolicy (identity-aware, L3/L4) | Standard Kubernetes NetworkPolicy (L3/L4) |
 | **Policy enforcement** | Cilium eBPF (managed by Azure) | Cilium eBPF (managed by Google) |
 | **Visual service map** | Hubble UI (localhost:12000, walked) | GCP Console → Observability → Traffic flows (not walked) |
 
-**Interview talking point — cross-cloud observability:** "Both clusters use Cilium. I can ask one node's agent directly for Hubble status and flows without certificates: `ds/cilium` on AKS and `ds/anetd` on GKE. This sees only that node's flows. AKS relay access requires mTLS; local CLI compatibility with the observed `hubble-relay:v1.17.18` has not been re-checked. GKE's relay is in `gke-managed-dpv2-observability`; the relay-container procedure is not walked."
+**Interview talking point — cross-cloud observability:** "Both clusters use Cilium. I can ask one node's agent directly for Hubble status and flows without certificates: `ds/cilium` on AKS and `ds/anetd` on GKE. This sees only that node's flows. AKS relay access with mTLS works with CLI 1.20.4 (walked 2026-11-16); the relay image observed on 2026-11-13 was `hubble-relay:v1.17.18`. Default flow output fails with `invalid fieldmask`; `--use-default-field-masks=false` or `-o jsonpb` works. Other CLI versions are not walked. GKE's relay is in `gke-managed-dpv2-observability`; the relay-container procedure is not walked."
 
 ## Interview Talking Points
 
@@ -337,7 +360,7 @@ All flows show `FORWARDED` — the Kubernetes NetworkPolicies (default-deny + al
 
 **Practical example:** "In our davidshaevel-website namespace, I can watch the full request lifecycle: kubelet health probes hitting the frontend on port 3000, backend querying PostgreSQL on port 5432, and Teleport routing external requests through the allow-from-teleport CiliumNetworkPolicy. Each flow shows `policy-verdict:L3-Only INGRESS ALLOWED`, which confirms the network policies are working as designed."
 
-**mTLS and ACNS nuance:** "The AKS relay requires mutual TLS: a local Hubble CLI request without TLS flags failed with `error reading server preface: EOF`. The relay image observed on 2026-11-13 (walked) was `hubble-relay:v1.17.18`. The earlier v0.13.x requirement was written for v1.15.0 and is not re-checked against the current relay. Certificate extraction and success with the documented TLS flags remain not walked."
+**mTLS and ACNS nuance:** "The AKS relay requires mutual TLS: a local Hubble CLI request without TLS flags failed with `error reading server preface: EOF`. The relay image observed on 2026-11-13 (walked) was `hubble-relay:v1.17.18`. CLI 1.20.4 connects with the five documented TLS flags (walked 2026-11-16), and status reports Ok with 1/1 connected nodes. Default flow output fails with `invalid fieldmask`; `--use-default-field-masks=false` produces compact output, or `-o jsonpb` returns flows. The v0.13.x requirement and gRPC ALPN claim are withdrawn; other CLI versions are not walked. Earlier certificate files were reused; extraction remains not walked."
 
 **Metrics vs. flows:** "Grafana dashboards give me the aggregate picture — packet rates, drop trends, policy enforcement status over time. Hubble gives me the per-packet detail when I need to drill down. They're complementary: I spot anomalies in Grafana, then investigate the specific flows in Hubble."
 
@@ -371,7 +394,7 @@ All flows show `FORWARDED` — the Kubernetes NetworkPolicies (default-deny + al
 | Gap | Impact | Workaround |
 |-----|--------|------------|
 | No Hubble metrics export to Prometheus | Cilium Policy Verdicts dashboard (18015) has no data — `hubble_policy_verdicts_total` is not scraped | Use Hubble CLI/UI for per-flow policy verdicts instead |
-| AKS relay observed as `hubble-relay:v1.17.18` (walked 2026-11-13) | Previous v0.13.x requirement was written for v1.15.0; compatibility not re-checked against the current relay | Use the walked agent route; later check local CLI version and relay access with TLS flags |
+| AKS relay image `hubble-relay:v1.17.18` (walked 2026-11-13); CLI 1.20.4 connects with mTLS (walked 2026-11-16) | Default flow output fails with `invalid fieldmask`; v0.13.x requirement and gRPC ALPN claim withdrawn; other CLI versions not walked | Use `--use-default-field-masks=false` for compact output or `-o jsonpb` (walked 2026-11-16); certificate extraction not walked |
 | No built-in Cilium Grafana dashboards | Must import community dashboards manually and fix datasource references | Imported IDs 16611 and 18015, added `k8s_app` metricRelabeling |
 | No ServiceMonitor for Cilium by default | Prometheus doesn't scrape Cilium metrics out of the box | Created PodMonitor in `manifests/monitoring/cilium-podmonitor.yaml` |
 | Azure Monitor profile not configured | No Azure-native metrics integration | Using self-managed kube-prometheus-stack instead |
