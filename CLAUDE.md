@@ -147,15 +147,20 @@ az acr repository list --name <acr-name> --output table
 az acr repository show-tags --name <acr-name> --repository <repository-name>/frontend
 az acr repository show-tags --name <acr-name> --repository <repository-name>/backend
 
-# Cilium / Hubble
-kubectl get pods -n kube-system -l k8s-app=cilium
-cilium status                     # Cilium CLI
-cilium hubble status              # Hubble relay status
-cilium hubble observe             # Live network flow observation
-cilium hubble ui                  # Open Hubble UI in browser (port-forward)
-./scripts/cilium/status.sh        # Full Cilium + Hubble + policy status
+# Cilium / Hubble — select the matching cluster context first; walked 2026-11-13 / 2026-11-14
+cilium status                     # AKS only (DaemonSet cilium)
+kubectl -n kube-system exec ds/anetd -c cilium-agent -- cilium-dbg status  # GKE health
+# Ask one node's agent directly; no certificates needed; flows from that node only
+kubectl -n kube-system exec ds/cilium -c cilium-agent -- hubble status   # AKS
+kubectl -n kube-system exec ds/cilium -c cilium-agent -- hubble observe  # AKS
+kubectl -n kube-system exec ds/anetd -c cilium-agent -- hubble status    # GKE
+kubectl -n kube-system exec ds/anetd -c cilium-agent -- hubble observe   # GKE
+kubectl port-forward -n kube-system svc/hubble-ui 12000:80  # AKS UI; open http://localhost:12000
+kubectl get pods -n kube-system -l k8s-app=cilium  # not walked
+cilium hubble ui                  # Open Hubble UI via CLI; not walked
+./scripts/cilium/status.sh        # Full Cilium + Hubble + policy status; not walked
 
-# Network Policies
+# Network Policies — not walked
 kubectl get networkpolicies -A              # Standard K8s policies
 kubectl get ciliumnetworkpolicies -A        # Cilium policies
 ./scripts/cilium/apply-policies.sh          # Apply namespace isolation policies
