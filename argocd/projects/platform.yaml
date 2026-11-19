@@ -44,3 +44,5 @@ spec:
       kind: StatefulSet
     - group: ''
       kind: Pod
+    - group: policy
+      kind: PodDisruptionBudget
